@@ -122,38 +122,45 @@ class OpenInsiderScraper:
         end_date = (datetime(year, month, 1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
         end_date = end_date.strftime('%m/%d/%Y')
         
-        url = f'http://openinsider.com/screener?s=&o=&pl=&ph=&ll=&lh=&fd=-1&fdr={start_date}+-+{end_date}&td=0&tdr=&fdlyl=&fdlyh=&daysago=&xp=1&xs=1&vl=&vh=&ocl=&och=&sic1=-1&sicl=100&sich=9999&grp=0&nfl=&nfh=&nil=&nih=&nol=&noh=&v2l=&v2h=&oc2l=&oc2h=&sortcol=0&cnt=5000&page=1'
-        
+        base_url = f'http://openinsider.com/screener?s=&o=&pl=&ph=&ll=&lh=&fd=-1&fdr={start_date}+-+{end_date}&td=0&tdr=&fdlyl=&fdlyh=&daysago=&xp=1&vl=&vh=&ocl=&och=&sic1=-1&sicl=100&sich=9999&grp=0&nfl=&nfh=&nil=&nih=&nol=&noh=&v2l=&v2h=&oc2l=&oc2h=&sortcol=0&cnt=5000'
+        keys = ['transaction_date', 'trade_date', 'ticker', 'company_name',
+                'owner_name', 'Title', 'transaction_type', 'last_price', 'Qty',
+                'shares_held', 'Owned', 'Value']
+        data = set()
+        page = 1
+
         try:
-            response = self._fetch_data(url)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find('table', {'class': 'tinytable'})
-            if not table:
-                self.logger.error(f"No table found for {month}-{year}")
-                return set()
-                
-            rows = table.find('tbody').find_all('tr')
-            data = set()
-            
-            for row in rows:
-                cols = row.find_all('td')
-                del cols[0]  # Remove the 'D' indicator column
-                if not cols:
-                    continue
-                    
-                keys = ['transaction_date', 'trade_date', 'ticker', 'company_name', 
-                        'owner_name', 'Title', 'transaction_type', 'last_price', 'Qty', 
-                        'shares_held', 'Owned', 'Value']
-                insider_data = {key: cols[i].get_text(strip=True) for i, key in enumerate(keys)}
-                
-                # Normalize transaction_type to just the code (e.g., "P - Purchase" -> "P")
-                if 'transaction_type' in insider_data and insider_data['transaction_type']:
-                    insider_data['transaction_type'] = insider_data['transaction_type'].split(' - ')[0].strip()
-                
-                # Apply filters
-                if self._apply_filters(insider_data):
-                    data.add(tuple(insider_data.values()))
-            
+            # Page through results; a page with fewer than cnt rows is the last one
+            while True:
+                response = self._fetch_data(f'{base_url}&page={page}')
+                response.raise_for_status()
+                soup = BeautifulSoup(response.text, 'html.parser')
+                table = soup.find('table', {'class': 'tinytable'})
+                if not table or not table.find('tbody'):
+                    if page == 1:
+                        self.logger.warning(f"No table found for {month}-{year}")
+                    break
+
+                rows = table.find('tbody').find_all('tr')
+                for row in rows:
+                    cols = row.find_all('td')
+                    if len(cols) < len(keys) + 1:
+                        continue
+                    del cols[0]  # Remove the 'X' filing-flag column
+
+                    insider_data = {key: cols[i].get_text(strip=True) for i, key in enumerate(keys)}
+
+                    # Normalize transaction_type to just the code (e.g., "P - Purchase" -> "P")
+                    if insider_data['transaction_type']:
+                        insider_data['transaction_type'] = insider_data['transaction_type'].split(' - ')[0].strip()
+
+                    if self._apply_filters(insider_data):
+                        data.add(tuple(insider_data.values()))
+
+                if len(rows) < 5000:
+                    break
+                page += 1
+
             # Save cache
             if self.config.cache_enabled:
                 with open(cache_path, 'w') as f:
@@ -162,8 +169,8 @@ class OpenInsiderScraper:
             return data
             
         except Exception as e:
-            self.logger.error(f"Error fetching data for {month}-{year}: {str(e)}")
-            return set()
+            # Re-raise so the month is reported as failed instead of silently empty
+            raise RuntimeError(f"Error fetching data for {month}-{year} (page {page}): {e}") from e
     
     def _clean_numeric(self, value: str) -> float:
         """Clean numeric values from strings, handling currency, percentages, and text."""
@@ -195,12 +202,12 @@ class OpenInsiderScraper:
                 return False
 
             # Convert and check value
-            value = self._clean_numeric(data['Value'])
+            value = abs(self._clean_numeric(data['Value']))
             if value < self.config.min_transaction_value:
                 return False
                 
             # Convert and check quantity
-            shares = self._clean_numeric(data['Qty'])
+            shares = abs(self._clean_numeric(data['Qty']))
             if shares < self.config.min_shares_traded:
                 return False
             
@@ -213,6 +220,7 @@ class OpenInsiderScraper:
         self.logger.info("Starting scraping process...")
         
         all_data = []
+        failed = []
         current_year = datetime.now().year
         current_month = datetime.now().month
         
@@ -237,9 +245,13 @@ class OpenInsiderScraper:
                         all_data.extend(data)
                         pbar.update(1)
                     except Exception as e:
-                        self.logger.error(f"Error processing month: {str(e)}")
+                        failed.append(str(e))
+                        self.logger.error(str(e))
+                        pbar.update(1)
         
         self.logger.info(f"Scraping completed. Found {len(all_data)} transactions.")
+        if failed:
+            self.logger.error(f"{len(failed)} month(s) failed; re-run to retry them (successful months are cached).")
         self._save_data(all_data)
     
     def _save_data(self, data: List[tuple]) -> None:

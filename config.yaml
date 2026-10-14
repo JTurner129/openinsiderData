@@ -6,7 +6,7 @@ output:
 
 # Scraping Settings
 scraping:
-  start_year: 2025  # From which year should data be retrieved
+  start_year: 2003  # From which year should data be retrieved
   start_month: 1    # From which month in start_year
   max_workers: 10   # Number of parallel downloads
   retry_attempts: 3 # Number of retry attempts on errors
@@ -15,7 +15,7 @@ scraping:
 # Filter Settings
 filters:
   min_transaction_value: 0     # Minimum transaction value in USD
-  transaction_types: []        # Empty = all types, or list: ["P", "S", "A", etc.]
+  transaction_types: ["P"]      # Empty = all types, or list: ["P", "S", "A", etc.]
   exclude_companies: []        # List of ticker symbols to exclude
   include_companies: []        # List of ticker symbols to include
   min_shares_traded: 0        # Minimum number of traded shares
@@ -31,4 +31,4 @@ logging:
 cache:
   enabled: true              # Enable/disable cache
   directory: ".cache"        # Cache directory
-  max_age: 24               # Maximum age of cache files in hours
+  max_age: 720              # Maximum age of cache files in hours
