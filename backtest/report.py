@@ -28,6 +28,14 @@ HORIZONS = ['1w', '1m', '3m', '6m', '1y']
 FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
 
 
+
+def _compustat():
+    """True when the run priced signals from Compustat (survivorship-free) rather than Yahoo."""
+    try:
+        return json.loads((DATA / 'price_cleaning.json').read_text()).get('source', '').startswith('Compustat')
+    except Exception:
+        return False
+
 def pct(x, d=1):
     return '–' if x is None or pd.isna(x) else f'{x * 100:.{d}f}%'
 
@@ -528,14 +536,26 @@ def summary_bullets(head, es, alphas, miss, T):
         c = c[c['hold'] == '1y'].set_index('portfolio')
         strat = c.loc[[i for i in c.index if i.startswith('Big-drop')][0]]
         ctrl = c.loc[[i for i in c.index if 'equal weight per date' in i][0]]
-        b.append(f'<strong>The best-looking filter is probably survivorship bias.</strong> Cluster buys after a ≥50% drop '
-                 f'earned {pct(strat["full alpha"])} alpha a year, but stocks that fell just as far on the same days '
-                 f'<em>without</em> insider buying earned {pct(ctrl["full alpha"])}. Crashed stocks that are still in '
-                 f'Yahoo\'s data are the ones that recovered, so this result needs delisted-stock data before anyone trades it. '
-                 f'See <a href="#stress">Stress tests</a>.')
+        if _compustat():
+            b.append(f'<strong>Insider buying after a crash adds nothing over the crash itself.</strong> Cluster buys after a '
+                     f'≥50% drop earned {pct(strat["full alpha"])} alpha a year (t {strat["full t"]:.1f}); every other stock '
+                     f'that fell just as far on the same days, with no insider buying, earned {pct(ctrl["full alpha"])} '
+                     f'(t {ctrl["full t"]:.1f}). Delisted stocks are included in both. See <a href="#stress">Stress tests</a>.')
+        else:
+            b.append(f'<strong>The best-looking filter is probably survivorship bias.</strong> Cluster buys after a ≥50% drop '
+                     f'earned {pct(strat["full alpha"])} alpha a year, but stocks that fell just as far on the same days '
+                     f'<em>without</em> insider buying earned {pct(ctrl["full alpha"])}. Crashed stocks that are still in '
+                     f'Yahoo\'s data are the ones that recovered, so this result needs delisted-stock data before anyone trades it. '
+                     f'See <a href="#stress">Stress tests</a>.')
     mx = miss[miss['signal_year'] == 'All']
     early = miss[miss['signal_year'].isin([str(y) for y in range(2006, 2012)])]
     early_cov = 1 - (early['signals'] * early['pct_missing']).sum() / early['signals'].sum()
+    if _compustat():
+        b.append(f'<strong>Prices include dead companies.</strong> {pct(1 - mx["pct_missing"].max(), 0)}–'
+                 f'{pct(1 - mx["pct_missing"].min(), 0)} of signals were priced from Compustat, which keeps delisted '
+                 f'stocks; a stock removed for poor performance takes an assumed delisting return (−30% NYSE/AMEX, '
+                 f'−55% Nasdaq/other). Unpriced signals are mostly companies without a Compustat record.')
+        return b
     b.append(f'<strong>How confident to be: moderately, and expect less in practice.</strong> Only '
              f'{pct(1 - mx["pct_missing"].max(), 0)}–{pct(1 - mx["pct_missing"].min(), 0)} of signals could be priced (Yahoo lacks '
              f'most delisted companies), falling to {pct(early_cov, 0)} for 2006–2011, the years with the strongest results. '
@@ -652,10 +672,13 @@ def build(cfg=None):
     parts.append(f'<h1>Insider-buying signals: backtest report</h1>'
                  f'<p class="sub">SEC Form 4 open-market purchases, filings {scrape["earliest_filing_date"]} to '
                  f'{scrape["latest_filing_date"]} ({scrape["rows"]:,} purchase filings). Signal date = filing date. '
-                 f'Entry = next trading day\'s open. Prices: Yahoo Finance, adjusted for splits and dividends.</p>'
+                 f'Entry = next trading day\'s open. Prices: '
+                 f'{"Compustat Security Daily via WRDS (includes delisted stocks), total-return adjusted" if _compustat() else "Yahoo Finance, adjusted for splits and dividends"}.</p>'
                  f'<nav><a href="#summary">Summary</a>{nav}<a href="#compare">Comparison</a><a href="#robust">Robustness</a>'
                  f'<a href="#realistic">Realistic trading</a><a href="#filters">Filter tests</a><a href="#combos">Combinations</a>'
                  f'<a href="#stress">Stress tests</a><a href="#track">Track record</a>'
+                 + ('<a href="#filings">Filing tests</a>' if (RESULTS / 'filing_tests.csv').exists() else '')
+                 + ('<a href="#matched">Matched comparison</a>' if (RESULTS / 'matched_controls.csv').exists() else '') +
                  f'<a href="#data">Data &amp; coverage</a><a href="#method">Method</a></nav>')
 
     # Summary
@@ -675,7 +698,7 @@ def build(cfg=None):
     parts.append('<div class="card"><ul>' + ''.join(f'<li>{x}</li>' for x in bullets) + '</ul></div>')
     parts.append('<details class="card"><summary><strong>How to read this</strong></summary>' + HOW_TO_READ + '</details>')
     high_missing = miss[(miss['signal_year'] == 'All') & (miss['pct_missing'] > 0.05)]
-    if len(high_missing):
+    if len(high_missing) and not _compustat():
         parts.append('<div class="card warn"><strong>Survivorship warning.</strong> More than 5% of signals have no usable '
                      'price for ' + ', '.join(html.escape(SCREENS[s][0]) for s in high_missing['screen']) +
                      '. Yahoo Finance drops most delisted companies, so these are missing, not dropped, and the remaining sample '
@@ -969,6 +992,47 @@ def build(cfg=None):
                                      't 2016+': num, 'Signals': lambda v: f'{int(v):,}'},
                                 color_cols=['Alpha', 'Alpha, 2016+ signals']))
 
+    fp = RESULTS / 'filing_tests.csv'
+    if fp.exists():
+        ft = pd.read_csv(fp)
+        parts.append('<h2 id="filings">Tests from other SEC filings</h2><p class="sub">Insider sales, Form 4 footnotes and '
+                     '8-K item codes, with rules written down and committed before the data were downloaded. Primary tests '
+                     '(P1–P3) are Holm-corrected among themselves; exploratory tests (E) are shown for interest only. '
+                     'Same realistic trading setup as the filter tests.</p>')
+        f2 = ft.copy()
+        f2['Screen'] = f2['screen'].map(lambda k: SCREENS[k][0])
+        f2 = f2[['Screen', 'hold', 'filter', 'signals', 'share kept', 'full alpha', 'full t', 'train vs baseline',
+                 'test vs baseline', 'test t', 'holm p', 'holds out of sample']]
+        f2.columns = ['Screen', 'Hold', 'Test', 'Signals', 'Kept', 'Alpha', 't', 'vs baseline 2006–15', 'vs baseline 2016+',
+                      't 2016+', 'Holm p', 'Holds out of sample']
+        parts.append(html_table(f2, {'Alpha': pct, 't': num, 'Kept': lambda v: pct(v, 0), 'vs baseline 2006–15': pct,
+                                     'vs baseline 2016+': pct, 't 2016+': num, 'Holm p': num,
+                                     'Signals': lambda v: f'{int(v):,}'},
+                                color_cols=['vs baseline 2006–15', 'vs baseline 2016+']))
+    mp_ = RESULTS / 'matched_controls.csv'
+    if mp_.exists():
+        mc = pd.read_csv(mp_)
+        parts.append('<h2 id="matched">Matched comparison group</h2><p class="sub">Each signal against the 5 stocks that '
+                     'looked most alike the day before entry (market cap, prior 6-month return, price-to-book) and had no '
+                     'insider purchase within 6 months either side. Same entry, exit, costs and delisting treatment. '
+                     '"Edge" is the average signal return minus its matched basket; t-stats are clustered by entry month.</p>')
+        m2 = mc.copy()
+        m2['Screen'] = m2['screen'].map(lambda k: SCREENS[k][0])
+        m2 = m2[['Screen', 'subset', 'hold', 'signals', 'signal mean', 'control mean', 'full edge', 'full t',
+                 '2006–15 edge', '2006–15 t', '2016+ edge', '2016+ t']]
+        m2.columns = ['Screen', 'Subset', 'Hold', 'Signals', 'Signal return', 'Matched return', 'Edge', 't',
+                      'Edge 2006–15', 't 2006–15', 'Edge 2016+', 't 2016+']
+        parts.append(html_table(m2, {c: pct for c in ['Signal return', 'Matched return', 'Edge', 'Edge 2006–15', 'Edge 2016+']}
+                                | {c: num for c in ['t', 't 2006–15', 't 2016+']} | {'Signals': lambda v: f'{int(v):,}'},
+                                color_cols=['Edge', 'Edge 2006–15', 'Edge 2016+']))
+        cp2 = RESULTS / 'matched_controls_calendar.csv'
+        if cp2.exists():
+            cc = pd.read_csv(cp2)
+            cc.columns = ['Hold', 'Period', 'Long clusters / short matched alpha', 't']
+            parts.append('<h3>Calendar time: long cluster signals, short their matched baskets</h3>' +
+                         html_table(cc, {'Long clusters / short matched alpha': pct, 't': num},
+                                    color_cols=['Long clusters / short matched alpha']))
+
     # Data & coverage
     parts.append('<h2 id="data">Data &amp; coverage</h2>')
     rp = pd.DataFrame(list(scrape['rows_per_year'].items()), columns=['Year', 'Purchase filings'])
@@ -983,8 +1047,11 @@ def build(cfg=None):
                  f'({meta["fund_dropped_by_sic"]:,} by SIC {bt["fund_sic_range"][0]}–{bt["fund_sic_range"][1]}, '
                  f'{meta["fund_dropped_by_name"]:,} by name), removing {meta["fund_raw_signals_dropped"]:,} raw cluster signals. '
                  f'Note SIC 6798 (REITs) falls inside this range, so REITs are excluded too.</p>'
-                 f'<p><strong>Prices:</strong> Yahoo had data for {pclean["tickers_found"]:,} of {pclean["tickers_requested"]:,} '
-                 f'tickers tried (filed tickers plus the companies\' current SEC tickers). Bad prints removed: '
+                 + (f'<p><strong>Prices:</strong> Compustat securities matched by CIK for {pclean["tickers_found"]:,} of '
+                  f'{pclean["tickers_requested"]:,} signal companies; delisting returns use the {pclean.get("delisting_mode", "shumway")} '
+                  f'assumption. Bad prints removed: ' if _compustat() else
+                  f'<p><strong>Prices:</strong> Yahoo had data for {pclean["tickers_found"]:,} of {pclean["tickers_requested"]:,} '
+                  f'tickers tried (filed tickers plus the companies\' current SEC tickers). Bad prints removed: ') +
                  f'{pclean["spikes_fixed"]:,} one-day V-shaped spikes (≥5× and back) in {pclean["tickers_with_spikes"]:,} tickers, '
                  f'{pclean["zero_days_dropped"]:,} days with a zero price, {pclean["opens_fixed"]:,} implausible opens.</p></div>')
     parts.append('<h3>Purchase filings per year</h3>' + html_table(rp, {'Purchase filings': lambda v: f'{int(v):,}'}))
@@ -994,15 +1061,22 @@ def build(cfg=None):
     mp['Screen'] = mp['screen'].map(lambda k: SCREENS[k][0])
     mp = mp[['Screen', 'signal_year', 'signals', 'priced', 'priced_via_new_ticker', 'pct_missing', 'no_ticker',
              'ticker_not_found', 'no_price_at_entry', 'price_mismatch', 'not_yet_entered']]
-    mp.columns = ['Screen', 'Year', 'Signals', 'Priced', 'Priced via new ticker', '% missing', 'No ticker', 'Not on Yahoo',
+    mp.columns = ['Screen', 'Year', 'Signals', 'Priced', 'Priced via new ticker', '% missing', 'No ticker', 'Not in Compustat' if _compustat() else 'Not on Yahoo',
                   'No price at entry', 'Price mismatch', 'Not yet entered']
-    parts.append('<h3>Missing prices per screen per year</h3><p class="note">"Not on Yahoo" is mostly delisted companies. '
+    parts.append('<h3>Missing prices per screen per year</h3><p class="note">' + ('' if _compustat() else '"Not on Yahoo" is mostly delisted companies. ') +
                  '"Price mismatch" means Yahoo\'s price at entry was more than 2× away from the insiders\' purchase price, '
                  'which usually means the ticker now belongs to a different company; those are treated as missing rather '
                  'than trusted.</p>')
     parts.append(html_table(mp, {'% missing': pct}))
 
-    parts.append('<h2 id="method">Method and assumptions</h2><div class="card">' + METHOD.format(**bt) + '</div>')
+    method = METHOD.format(**bt)
+    if _compustat():
+        method = (method.replace('Where Yahoo has no open, the close is used and flagged.',
+                                 'Where Compustat has no open, the close is used (1.4% of cluster and executive entries).')
+                  .replace("Yahoo's split-unadjusted price at entry", "The as-traded Compustat price at entry")
+                  .replace("survivorship bias from Yahoo's missing delisted stocks",
+                           "delisting returns are assumed (Shumway), not observed, because CRSP was not available"))
+    parts.append('<h2 id="method">Method and assumptions</h2><div class="card">' + method + '</div>')
 
     from plotly.offline import get_plotlyjs
     plotly_js = f'<script type="text/javascript">{get_plotlyjs()}</script>'
