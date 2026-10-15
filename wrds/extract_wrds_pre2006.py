@@ -7,10 +7,12 @@ Pulls daily prices for every US-dollar common stock of a US company (including c
 Run on the WRDS JupyterHub terminal, in any folder:
 
     python3 extract_wrds_pre2006.py
+    python3 extract_wrds_pre2006.py --start 1983-01-01 --end 1989-12-31   # earlier years (prices only)
 
 Writes Parquet files to the current folder and skips any already written (safe to re-run if it stops).
 Expect roughly 0.5-0.8 GB and 20-60 minutes.
 """
+import argparse
 import os
 import sys
 
@@ -50,6 +52,10 @@ def save(db, name, sql, date_cols=()):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--start', default=START)
+    ap.add_argument('--end', default=END)
+    args = ap.parse_args()
     db = wrds.Connection()
     cols = present(db, 'comp', 'fundq', FUNDQ)
     save(db, 'compustat_fundq_full_pre2003',
@@ -61,9 +67,9 @@ def main():
          f"and datadate < '2002-01-01' and gvkey in {USA}", ['datadate'])
     cols = present(db, 'comp', 'secd', SECD)
     cond = "tpci = '0' and curcdd = 'USD' and gvkey in " + USA
-    for q in pd.date_range(START, END, freq='QS'):
+    for q in pd.date_range(args.start, args.end, freq='QS'):
         name = f'compustat_daily_all_{q.year}q{q.quarter}'
-        q_end = min(q + pd.offsets.QuarterEnd(0), pd.Timestamp(END))
+        q_end = min(q + pd.offsets.QuarterEnd(0), pd.Timestamp(args.end))
         try:
             save(db, name, f"select {', '.join(cols)} from comp.secd where datadate between "
                            f"'{q.date()}' and '{q_end.date()}' and {cond}", ['datadate'])
