@@ -19,6 +19,9 @@ Out-of-sample scoring 1990-2026 (also split 1990-2007 / 2008-2026): CAGR, Sharpe
 always-small-value, always-large-growth, 50/50 monthly rebalanced, and the market; hit rate of the sign;
 out-of-sample R-squared against the expanding historical mean (Campbell & Thompson 2008).
 Diagnostics: the same for each predictor alone.
+Amendment (before any result was seen; the French file has no annual "Sum of BE / Sum of ME" block):
+the value spread uses the file's monthly "Value Weight Average of BE/ME" (book equity of the prior fiscal
+year over that month's market value), lagged one month.
 Only if the six-predictor rule beats 50/50 on Sharpe in BOTH 1990-2007 and 2008-2026 with out-of-sample
 R-squared > 0 will it be applied to our own strategies (a follow-up with its own pre-written rules).
 """
@@ -73,7 +76,7 @@ def load_data():
         return pd.read_parquet(path)
     t = _french_sections(FRENCH)
     ret = _parse_block(t, r'Average Value Weighted Returns -- Monthly') / 100
-    bm = _parse_block(t, r'Sum of BE / Sum of ME', monthly=False)
+    bm = _parse_block(t, r'Value Weight Average of BE/ME Calculated for June of t to June')
     ff = _parse_block(_french_sections(FF3), r'Mkt-RF', monthly=True) / 100 if False else None
     t3 = _french_sections(FF3)
     lines = t3.splitlines()
@@ -97,8 +100,8 @@ def load_data():
     df = pd.DataFrame({'SV': ret['SMALL HiBM'], 'BG': ret['BIG LoBM'], 'SG': ret['SMALL LoBM'], 'BV': ret['BIG HiBM']})
     df = df.join(ff, how='left').join(F, how='left')
     # value spread from June sums, usable from July of that year to June of the next
-    vs = np.log(bm['SMALL HiBM'] / bm['BIG LoBM'])
-    df['value_spread'] = [vs.get(d.year if d.month >= 7 else d.year - 1, np.nan) for d in df.index]
+    bm = bm.where(bm > 0)
+    df['value_spread'] = np.log(bm['SMALL HiBM'] / bm['BIG LoBM']).reindex(df.index).shift(1)
     df.to_parquet(path)
     return df
 
