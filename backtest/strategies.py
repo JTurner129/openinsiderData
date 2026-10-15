@@ -36,6 +36,10 @@ A6  (added later, rules fixed before running) the same overlay with fixed sizing
     set at entry and left to drift; borrow fee 5.4% a year on the short positions. With no signals the
     book is empty and the portfolio is just SPY.
 
+A7  (added later, rules fixed before running) A6 with a cap: 2% per trade, but total long exposure at most
+    G of the portfolio (and the same short), G = 30% and 50%; when more trades are open, every open trade
+    is scaled down equally (per-trade weight = min(2%, G / open trades)).
+
 A4  Entry month: the same big-drop per-trade edge for entries from 15 November to 31 December
     (tax-loss selling season) against all other months.
 """
@@ -270,11 +274,17 @@ def sized_overlay(spy, rf):
     units = d['drop50liq|6m|units'].reindex(spy.index).fillna(0.0)
     start = units.index[(units > 0).values][0]
     rows, curves = [], {}
-    for f in (0.0, 0.02, 0.03):
+    for f in (0.0, 0.02, 0.03, 'cap30', 'cap50'):
         # P&L per unit of each position, scaled to f of equity per position (approximation: equity at entry
         # taken as current equity), fee on the short side's current value
-        p = (spy + f * (sig - ctl - units * 0.054 / 252)).loc[start:]
-        name = 'SPY only' if f == 0 else f'SPY + {f:.0%} per trade hedged book'
+        if isinstance(f, str):
+            g = int(f[3:]) / 100
+            w = np.minimum(0.02, g / units.where(units > 0, 1.0)).shift(1).fillna(0.02)
+            p = (spy + w * (sig - ctl - units * 0.054 / 252)).loc[start:]
+            name = f'SPY + 2% per trade, capped at {g:.0%} long / {g:.0%} short'
+        else:
+            p = (spy + f * (sig - ctl - units * 0.054 / 252)).loc[start:]
+            name = 'SPY only' if f == 0 else f'SPY + {f:.0%} per trade hedged book'
         curves[name] = p
         for lab, sl in (('full', slice(None)), ('to 2015', slice(None, '2015-12-31')), ('2016+', slice('2016-01-01', None))):
             rows.append({'portfolio': name, 'period': lab, 'avg open trades': float(units.loc[start:].loc[sl].mean()),
