@@ -18,4 +18,8 @@ Output: JSON with a 1-10 score, buy / pass, and three short reasons.
 Measures (pre-registered): Spearman correlation between score and the 6-month return minus SPY (entries
 with a complete 6 months); average 6-month return minus SPY for score >= 7 against score <= 4; and
 "buy" against "pass". Small sample: treated as a pilot, not proof.
+
+Amendment (committed before any model run, because the 8B model was far too slow on this machine's CPU):
+use Llama 3.2 3B Instruct (4-bit GGUF; same December 2023 training cutoff per Meta's model card); keep every
+candidate from (a); from (b) and (c) take a fixed random sample of 150 each (seed 20261015).
 """
