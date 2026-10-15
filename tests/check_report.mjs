@@ -30,7 +30,9 @@ const result = await page.evaluate(() => {
     const drawnBars = [...p.querySelectorAll('.bars path')].filter(el => {
       const d = el.getAttribute('d') || ''; return d && d !== 'M0,0Z' && !/^M[\d.]+,([\d.]+)V\1Z$/.test(d);
     }).length;
-    return { title, traces, marks, finite: finite || drawnBars > 0 };
+    // Scatter data is binary-encoded too; count drawn markers.
+    const drawnPoints = p.querySelectorAll('.scatterlayer .point').length;
+    return { title, traces, marks, finite: finite || drawnBars > 0 || drawnPoints > 0 };
   });
   const tables = [...document.querySelectorAll('table')].map(t => ({
     head: [...t.querySelectorAll('th')].slice(0, 3).map(th => th.textContent).join(' | '),

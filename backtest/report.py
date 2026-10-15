@@ -409,6 +409,21 @@ def summary_bullets(head, es, alphas, miss, T):
              f'cuts alpha by {pct(cut.min(), 0)}–{pct(cut.max(), 0)}, and these are small, thinly traded stocks where daily '
              f'rebalancing and the 0.5% cost assumption flatter real-world results. Entering two days later instead of at the '
              f'next open costs about {pct((d3["next open"] - d3[late]).mean())} of 3-month excess return.')
+    rp = RESULTS / 'realistic_trading.csv'
+    if rp.exists():
+        r = pd.read_csv(rp)
+        r = r[(r['screen'] == 'cluster3') & (r['hold'] == '1y')].set_index('step')
+        first, real = r.index[0], [i for i in r.index if i.startswith('4.')][0]
+        bh = [i for i in r.index if i.startswith('3.')][0]
+        sp = [i for i in r.index if i.startswith('2.')][0]
+        b.append(f'<strong>Under realistic trading, most of the edge disappears.</strong> For clusters ≥3 held a year, alpha '
+                 f'(after a micro-cap factor) falls from {pct(r.loc[first, "FF5+UMD+IWC alpha"])} as reported to '
+                 f'{pct(r.loc[real, "FF5+UMD+IWC alpha"])} (t = {num(r.loc[real, "FF5+UMD+IWC t"])}) with estimated spreads, '
+                 f'buy-and-hold weights and next-close entry, and to {pct(r.loc[real, "test alpha"])} in 2016–2026 '
+                 f'(t = {num(r.loc[real, "test t"])}). The biggest single drop is from daily rebalancing to buy-and-hold '
+                 f'weights (−{pct(r.loc[sp, "FF5+UMD+IWC alpha"] - r.loc[bh, "FF5+UMD+IWC alpha"])} a year), not from costs '
+                 f'(−{pct(r.loc[first, "FF5+UMD+IWC alpha"] - r.loc[sp, "FF5+UMD+IWC alpha"])}). See <a href="#realistic">Realistic trading</a> and '
+                 f'<a href="#filters">Filter tests</a>.')
     mx = miss[miss['signal_year'] == 'All']
     early = miss[miss['signal_year'].isin([str(y) for y in range(2006, 2012)])]
     early_cov = 1 - (early['signals'] * early['pct_missing']).sum() / early['signals'].sum()
