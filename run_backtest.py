@@ -9,7 +9,7 @@ interruption resumes instead of starting over.
 """
 import sys
 
-from backtest import analysis, filters, prices, report, returns, signals
+from backtest import analysis, combos, filters, prices, report, returns, signals
 from backtest.common import load_config
 import sec_insider_data
 
@@ -19,7 +19,7 @@ PHASES = {
     3: ('Prices', prices.run),
     4: ('Returns', returns.run),
     5: ('Analysis', analysis.run),
-    6: ('Realistic trading and filter tests', filters.run),
+    6: ('Realistic trading, filter tests and combination search', lambda cfg: (filters.run(cfg), combos.run(cfg))),
     7: ('Report', report.build),
 }
 

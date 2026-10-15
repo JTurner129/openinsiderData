@@ -12,6 +12,7 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 
 from .common import CHARTS, DATA, RESULTS, ROOT, SCREENS, get_logger, load_config
+from .prices import load_price
 
 LOG = get_logger('report')
 for _n in ('kaleido', 'choreographer'):
@@ -314,6 +315,59 @@ def survivors_chart(tests):
     return fig
 
 
+def combo_scatter(search, hold):
+    fig = go.Figure()
+    for sc, symbol in zip(['cluster3', 'exec200k'], ['circle', 'diamond']):
+        d = search[(search['screen'] == sc) & (search['hold'] == hold)].dropna(subset=['train alpha', 'test alpha'])
+        top = d.nlargest(20, 'train t')
+        fig.add_trace(go.Scattergl(
+            x=d['train alpha'] * 100, y=d['test alpha'] * 100, mode='markers', name=f'{SCREENS[sc][0]}: all combinations',
+            marker=dict(size=5, symbol=symbol, color=SCREEN_COLOR[sc], opacity=0.25), text=d['combo'],
+            hovertemplate='%{text}<br>2006–15: %{x:.1f}%/yr<br>2016–26: %{y:.1f}%/yr<extra></extra>'))
+        fig.add_trace(go.Scattergl(
+            x=top['train alpha'] * 100, y=top['test alpha'] * 100, mode='markers', name=f'{SCREENS[sc][0]}: top 20 picked on 2006–15',
+            marker=dict(size=11, symbol=symbol, color=SCREEN_COLOR[sc], line=dict(color=INK, width=1.5)), text=top['combo'],
+            hovertemplate='%{text}<br>2006–15: %{x:.1f}%/yr<br>2016–26: %{y:.1f}%/yr<extra>top 20</extra>'))
+    base_layout(fig, f'Every filter combination: 2006–2015 alpha vs 2016–2026 alpha ({hold} hold)',
+                'Alpha on 2006–2015 signals (%/yr)', 'Alpha on 2016–2026 signals (%/yr)', height=560)
+    fig.add_hline(y=0, line=dict(color=AXIS, width=1))
+    fig.add_vline(x=0, line=dict(color=AXIS, width=1))
+    fig.update_xaxes(ticksuffix='%')
+    fig.update_yaxes(ticksuffix='%')
+    fig.update_layout(hovermode='closest')
+    return fig
+
+
+def walkforward_chart(wfd, screen):
+    fig = go.Figure()
+    vals = []
+    styles = {'walk-forward': dict(color=SCREEN_COLOR[screen]), 'no filter': dict(color=SERIES[2], dash='dash')}
+    for h in ['6m', '1y']:
+        for lab in ['walk-forward', 'no filter']:
+            col = f'{screen}|{h}|{lab}'
+            if col not in wfd:
+                continue
+            r = wfd[col].dropna()
+            w = 10_000 * (1 + r).cumprod()
+            vals += [w.min(), w.max()]
+            name = f'{"Walk-forward best combo" if lab == "walk-forward" else "No filter"}, {h} hold'
+            st = dict(styles[lab])
+            if h == '6m':
+                st['width'] = 1.5
+            fig.add_trace(go.Scatter(x=w.index, y=w, name=name, line=dict(width=st.pop('width', 2.5), **st),
+                                     opacity=0.6 if h == '6m' else 1, hovertemplate=name + ': $%{y:,.0f}<extra></extra>'))
+    start = min(wfd[c].first_valid_index() for c in wfd if c.startswith(screen))
+    spy = load_price('SPY')['adj_close'].pct_change().loc[start:].fillna(0)
+    w = 10_000 * (1 + spy).cumprod()
+    vals += [w.min(), w.max()]
+    fig.add_trace(go.Scatter(x=w.index, y=w, name='SPY', line=dict(width=2, **BENCH_STYLE['SPY']),
+                             hovertemplate='SPY: $%{y:,.0f}<extra></extra>'))
+    base_layout(fig, f'{SCREENS[screen][0]}: re-picking the best combination each year using only past data',
+                'Date', 'Growth of $10,000 (log scale)', height=480)
+    log_ticks(fig, vals)
+    return fig
+
+
 def decay_bars(alphas):
     holds = ['1m', '3m', '6m', '1y']
     fig = go.Figure()
@@ -545,7 +599,7 @@ def build(cfg=None):
                  f'{scrape["latest_filing_date"]} ({scrape["rows"]:,} purchase filings). Signal date = filing date. '
                  f'Entry = next trading day\'s open. Prices: Yahoo Finance, adjusted for splits and dividends.</p>'
                  f'<nav><a href="#summary">Summary</a>{nav}<a href="#compare">Comparison</a><a href="#robust">Robustness</a>'
-                 f'<a href="#realistic">Realistic trading</a><a href="#filters">Filter tests</a>'
+                 f'<a href="#realistic">Realistic trading</a><a href="#filters">Filter tests</a><a href="#combos">Combinations</a>'
                  f'<a href="#data">Data &amp; coverage</a><a href="#method">Method</a></nav>')
 
     # Summary
@@ -750,6 +804,61 @@ def build(cfg=None):
                                      'Holm p (full period)': lambda v: '–' if pd.isna(v) else f'{v:.3f}',
                                      'Signals': lambda v: f'{int(v):,}'},
                                 color_cols=['Δ vs none 2006–15', 'Δ vs none 2016–26']))
+
+    if (RESULTS / 'combo_summary.csv').exists():
+        csum = pd.read_csv(RESULTS / 'combo_summary.csv')
+        cwf = pd.read_csv(RESULTS / 'combo_walkforward.csv')
+        cpk = pd.read_csv(RESULTS / 'combo_walkforward_picks.csv')
+        ctop = pd.read_csv(RESULTS / 'combo_top_by_train.csv')
+        csearch = pd.read_parquet(DATA / 'combo_search_all.parquet')
+        wfd = pd.read_parquet(DATA / 'combo_walkforward_daily.parquet')
+        wfd.index = pd.to_datetime(wfd.index)
+        T.update({'combo_summary': csum, 'combo_walkforward': cwf, 'combo_walkforward_picks': cpk, 'combo_top_by_train': ctop})
+        parts.append(f'<h2 id="combos">Combination search</h2><p class="sub">Every single filter, every pair, and triples among '
+                     f'the 20 strongest singles: {len(csearch):,} scored combinations across both screens and four holds. Setup: '
+                     f'zero fees, full estimated spread paid, buy-and-hold weights, entry at the next open. Each combination is '
+                     f'scored on 2006–2015 signals and checked on separate 2016–2026 signals. The walk-forward test re-picks the '
+                     f'best combination every year using only earlier data, which is what running a combination search for real '
+                     f'would have earned.</p>')
+        for h in ['6m', '1y']:
+            parts.append(ch.add(f'combo_scatter_{h}', combo_scatter(csearch, h),
+                                'If good early results predicted good later results, points would rise from left to right and the '
+                                'highlighted top picks would sit high on the chart.'))
+        for sc in ['cluster3', 'exec200k']:
+            parts.append(ch.add(f'combo_walkforward_{sc}', walkforward_chart(wfd, sc),
+                                'The walk-forward line only ever uses information available at the time. Compare it with simply '
+                                'taking every signal (no filter).'))
+        w = cwf.copy()
+        w['Screen'] = w['screen'].map(lambda k: SCREENS[k][0])
+        w = w[['Screen', 'hold', 'walk-forward signals', 'walk-forward alpha', 'walk-forward t', 'walk-forward alpha 2020+',
+               'walk-forward CAGR', 'no filter alpha', 'no filter t', 'no filter alpha 2020+', 'no filter CAGR']]
+        w.columns = ['Screen', 'Hold', 'Signals traded', 'Walk-forward alpha', 't', 'Alpha 2020+', 'CAGR',
+                     'No-filter alpha', 'No-filter t', 'No-filter alpha 2020+', 'No-filter CAGR']
+        parts.append(f'<h3>Walk-forward results ({int(cpk["year"].min())}–{int(cpk["year"].max())})</h3>')
+        parts.append(html_table(w, {c: pct for c in ['Walk-forward alpha', 'Alpha 2020+', 'CAGR', 'No-filter alpha',
+                                                    'No-filter alpha 2020+', 'No-filter CAGR']} |
+                                {'t': num, 'No-filter t': num, 'Signals traded': lambda v: f'{int(v):,}'},
+                                color_cols=['Walk-forward alpha', 'No-filter alpha']))
+        cs = csum.copy()
+        cs['Screen'] = cs['screen'].map(lambda k: SCREENS[k][0])
+        cs = cs[['Screen', 'hold', 'combinations', 'rank correlation (train t vs test alpha)', 'no-filter test alpha',
+                 'top-20 by train t: median test alpha', 'top-20 by train t: share beating no filter in test',
+                 'best train combo', 'its train alpha', 'its test alpha', 'its test t']]
+        cs.columns = ['Screen', 'Hold', 'Combinations', 'Rank corr. early vs late', 'No filter, 2016–26',
+                      'Top 20 picks: median 2016–26', 'Top 20: share beating no filter', 'Best early combination',
+                      'Its 2006–15 alpha', 'Its 2016–26 alpha', 'Its 2016–26 t']
+        parts.append('<h3>Did early winners keep winning?</h3>')
+        parts.append(html_table(cs, {'Rank corr. early vs late': num, 'No filter, 2016–26': pct, 'Top 20 picks: median 2016–26': pct,
+                                     'Top 20: share beating no filter': pct, 'Its 2006–15 alpha': pct, 'Its 2016–26 alpha': pct,
+                                     'Its 2016–26 t': num, 'Combinations': lambda v: f'{int(v):,}'},
+                                color_cols=['Top 20 picks: median 2016–26', 'Its 2016–26 alpha']))
+        pk = cpk.copy()
+        pk['Screen'] = pk['screen'].map(lambda k: SCREENS[k][0])
+        pk = pk[pk['hold'].isin(['6m', '1y'])][['Screen', 'hold', 'year', 'chosen combo', 'in-sample alpha', 'in-sample t', 'signals traded']]
+        pk.columns = ['Screen', 'Hold', 'Year traded', 'Combination picked (past data only)', 'Past alpha', 'Past t', 'Signals traded']
+        parts.append('<h3>What the walk-forward picked each year (6-month and 1-year holds)</h3>')
+        parts.append(html_table(pk, {'Past alpha': pct, 'Past t': num, 'Signals traded': lambda v: f'{int(v):,}',
+                                     'Year traded': lambda v: str(int(v))}))
 
     # Data & coverage
     parts.append('<h2 id="data">Data &amp; coverage</h2>')
