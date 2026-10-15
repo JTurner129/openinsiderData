@@ -105,10 +105,53 @@ def build_price_panel(tickers):
     return panel
 
 
+def sec_current_tickers(cfg):
+    """issuer CIK -> list of the company's current tickers, from the SEC.
+
+    Used when the ticker on the filing no longer works on Yahoo (most often
+    because the company changed its symbol after the filing)."""
+    import requests
+    path = CACHE / 'sec_company_tickers.json'
+    if not path.exists():
+        r = requests.get('https://www.sec.gov/files/company_tickers.json',
+                         headers={'User-Agent': cfg['sec']['user_agent']}, timeout=60)
+        r.raise_for_status()
+        path.write_text(r.text)
+    out = {}
+    for rec in json.loads(path.read_text()).values():
+        out.setdefault(int(rec['cik_str']), []).append(rec['ticker'].upper())
+    # Company info fetched in Phase 2 (submissions JSON) also lists tickers.
+    info_path = CACHE / 'sec_company_info.json'
+    if info_path.exists():
+        for cik, rec in json.loads(info_path.read_text()).items():
+            for t in rec.get('tickers') or []:
+                if t.upper() not in out.setdefault(int(cik), []):
+                    out[int(cik)].append(t.upper())
+    return out
+
+
+def alternate_tickers(signals, cfg):
+    """Per issuer CIK, the SEC's current tickers that differ from the filed ones."""
+    current = sec_current_tickers(cfg)
+    filed = signals.groupby('issuer_cik')['ticker'].agg(lambda x: set(x.dropna()))
+    alts = {}
+    for cik, tickers in filed.items():
+        extra = [t for t in current.get(int(cik), []) if t not in tickers]
+        if extra:
+            alts[int(cik)] = extra
+    path = DATA / 'alternate_tickers.json'
+    path.write_text(json.dumps({str(k): v for k, v in alts.items()}, indent=1))
+    return alts
+
+
 def run(cfg=None, refresh_missing=False):
     cfg = cfg or load_config()
     signals = pd.read_parquet(DATA / 'signals_all_variants.parquet')
     tickers = sorted(signals['ticker'].dropna().unique().tolist())
+    alts = alternate_tickers(signals, cfg)
+    alt_tickers = sorted({t for v in alts.values() for t in v} - set(tickers))
+    LOG.info(f"{len(alts):,} companies have a different current SEC ticker; {len(alt_tickers):,} extra tickers to try")
+    tickers = tickers + alt_tickers
     bench = cfg['backtest']['benchmarks']
     missing = download_prices(bench + tickers, refresh_missing)
     for b in bench:
@@ -118,7 +161,7 @@ def run(cfg=None, refresh_missing=False):
     panel.to_parquet(DATA / 'prices.parquet', index=False)
     panel.to_csv(DATA / 'prices.csv.gz', index=False, float_format='%.4f')
     LOG.info(f"Price panel: {panel['ticker'].nunique():,} tickers, {len(panel):,} rows; "
-             f"{len([t for t in tickers if t in missing]):,} signal tickers missing from Yahoo")
+             f"{len([t for t in tickers if t in missing]):,} of {len(tickers):,} tickers missing from Yahoo")
     return panel
 
 

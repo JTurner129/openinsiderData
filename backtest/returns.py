@@ -1,4 +1,6 @@
 """Phase 4: per-signal returns at fixed trading-day horizons."""
+import json
+
 import numpy as np
 import pandas as pd
 
@@ -95,6 +97,38 @@ def compute_returns(signals, cfg, entry_delay=1):
     return out
 
 
+FALLBACK_STATUSES = {'no_ticker', 'ticker_not_found', 'no_price_at_entry', 'price_mismatch'}
+
+
+def compute_with_fallback(signals, cfg, entry_delay=1):
+    """Price each signal with its filed ticker; if that fails, try the
+    company's current SEC tickers (ticker changes) in order. The same entry
+    and price-match checks apply, so a recycled ticker is still rejected."""
+    out = compute_returns(signals, cfg, entry_delay)
+    out['price_ticker'] = out['ticker'].where(out['price_found'])
+    out['ticker_source'] = np.where(out['price_found'], 'filing', None)
+    alt_path = DATA / 'alternate_tickers.json'
+    alts = {int(k): v for k, v in json.loads(alt_path.read_text()).items()} if alt_path.exists() else {}
+    for k in range(max((len(v) for v in alts.values()), default=0)):
+        need = out[~out['price_found'] & out['price_status'].isin(FALLBACK_STATUSES) &
+                   out['issuer_cik'].map(lambda c: len(alts.get(int(c), [])) > k)]
+        if need.empty:
+            break
+        sub = signals.loc[need.index].copy()
+        sub['ticker'] = sub['issuer_cik'].map(lambda c: alts[int(c)][k])
+        rr = compute_returns(sub, cfg, entry_delay)
+        ok = rr.index[rr['price_found']]
+        if len(ok):
+            filed = out.loc[ok, 'ticker']
+            for c in rr.columns:
+                out.loc[ok, c] = rr.loc[ok, c]
+            out.loc[ok, 'ticker'] = filed
+            out.loc[ok, 'price_ticker'] = rr.loc[ok, 'ticker']
+            out.loc[ok, 'ticker_source'] = 'sec_current'
+        LOG.info(f"  fallback round {k + 1}: {len(need):,} unpriced signals tried, {len(ok):,} recovered via current SEC ticker")
+    return out
+
+
 def run(cfg=None):
     cfg = cfg or load_config()
     bt = cfg['backtest']
@@ -102,7 +136,7 @@ def run(cfg=None):
     frames = []
     for delay in bt['entry_delay_variants']:
         sub = signals if delay == bt['entry_delay_days'] else signals[signals['dedupe_days'] == bt['dedupe_days']]
-        r = compute_returns(sub, cfg, delay)
+        r = compute_with_fallback(sub, cfg, delay)
         frames.append(r)
         LOG.info(f"entry delay {delay}: {len(r):,} signal rows, {r['price_found'].mean():.1%} priced")
     allr = pd.concat(frames, ignore_index=True)

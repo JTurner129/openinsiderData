@@ -285,7 +285,10 @@ def signal_table_json(trades, screen):
     t = trades[trades['screen'] == screen].sort_values('signal_date', ascending=False)
     rows = []
     for _, r in t.iterrows():
-        rows.append([r['signal_date'].strftime('%Y-%m-%d'), r['ticker'] or '', r['company_name'] or '',
+        tk = r['ticker'] or ''
+        if r.get('ticker_source') == 'sec_current':
+            tk = f"{tk or '?'} → {r['price_ticker']}"
+        rows.append([r['signal_date'].strftime('%Y-%m-%d'), tk, r['company_name'] or '',
                      int(r['n_insiders']), round(float(r['total_value'] or 0)),
                      *[None if pd.isna(r[f'ret_{h}']) else round(float(r[f'ret_{h}']) * 100, 1) for h in HORIZONS],
                      *[None if pd.isna(r[f'xs_spy_{h}']) else round(float(r[f'xs_spy_{h}']) * 100, 1) for h in ['1y']],
@@ -578,10 +581,10 @@ def build(cfg=None):
     parts.append('<h3>Signals per screen per year</h3>' + html_table(c2, {}))
     mp = miss.copy()
     mp['Screen'] = mp['screen'].map(lambda k: SCREENS[k][0])
-    mp = mp[['Screen', 'signal_year', 'signals', 'priced', 'pct_missing', 'no_ticker', 'ticker_not_found',
-             'no_price_at_entry', 'price_mismatch', 'not_yet_entered']]
-    mp.columns = ['Screen', 'Year', 'Signals', 'Priced', '% missing', 'No ticker', 'Not on Yahoo', 'No price at entry',
-                  'Price mismatch', 'Not yet entered']
+    mp = mp[['Screen', 'signal_year', 'signals', 'priced', 'priced_via_new_ticker', 'pct_missing', 'no_ticker',
+             'ticker_not_found', 'no_price_at_entry', 'price_mismatch', 'not_yet_entered']]
+    mp.columns = ['Screen', 'Year', 'Signals', 'Priced', 'Priced via new ticker', '% missing', 'No ticker', 'Not on Yahoo',
+                  'No price at entry', 'Price mismatch', 'Not yet entered']
     parts.append('<h3>Missing prices per screen per year</h3><p class="note">"Not on Yahoo" is mostly delisted companies. '
                  '"Price mismatch" means Yahoo\'s price at entry was more than 2× away from the insiders\' purchase price, '
                  'which usually means the ticker now belongs to a different company; those are treated as missing rather '

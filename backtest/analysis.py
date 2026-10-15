@@ -105,6 +105,7 @@ def missing_prices(trades):
             n = len(entered)
             rows.append({'screen': screen, 'signal_year': label, 'signals': n,
                          'priced': int(st.get('ok', 0)),
+                         'priced_via_new_ticker': int((entered['ticker_source'] == 'sec_current').sum()),
                          'pct_missing': 1 - st.get('ok', 0) / n if n else np.nan,
                          'no_ticker': int(st.get('no_ticker', 0)),
                          'ticker_not_found': int(st.get('ticker_not_found', 0)),
@@ -149,7 +150,7 @@ def calendar_portfolio(trades, hold_days, series, rf):
     total = np.zeros(len(cal))
     count = np.zeros(len(cal))
     for _, t in trades.iterrows():
-        s = series.get(t['ticker'])
+        s = series.get(t['price_ticker'])
         if s is None or pd.isna(t['entry_date']):
             continue
         ret, intraday, last = s
