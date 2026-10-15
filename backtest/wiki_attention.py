@@ -59,7 +59,7 @@ def month_file(p, titles):
     pat = OUT / '_patterns.txt'
     url = f'{BASE}/{p.year}/{p}/pageviews-{p.strftime("%Y%m")}-user.bz2'
     cmd = (f"curl -sS --retry 5 --retry-delay 20 -A '{UA}' '{url}' | bzip2 -dc | "
-           f"grep -F -f '{pat}' || true")
+           f"grep -a -F -f '{pat}' || true")
     for attempt in range(3):
         res = subprocess.run(['bash', '-c', 'set -o pipefail; ' + cmd], capture_output=True, text=True)
         if res.stdout:
