@@ -17,6 +17,7 @@ The WRDS files are licensed and live in a separate private repository
 aggregate results.
 """
 import os
+import os
 import re
 from pathlib import Path
 
@@ -27,7 +28,8 @@ import pyarrow.parquet as pq
 from .common import CACHE, DATA, ROOT, get_logger, load_config
 
 LOG = get_logger('compustat')
-CS_CACHE = CACHE / 'prices_cs'
+# CS_CACHE_NAME=prices_cs_full selects the 1990+ cache (holdout tests); default is the 2005+ cache
+CS_CACHE = CACHE / os.environ.get('CS_CACHE_NAME', 'prices_cs')
 LISTED = (11, 12, 14)                      # NYSE, NYSE American, Nasdaq
 NYSE_AMEX = (11, 12)
 # Compustat deletion reasons treated as performance-related (no deal price at the end)
@@ -60,7 +62,7 @@ def build_cache(cfg=None, force=False):
     num = ['prccd', 'prcod', 'prchd', 'prcld', 'cshtrd', 'cshoc', 'ajexdi', 'trfd']
     # Pass 1: re-bucket every quarterly file by security, so pass 2 can hold one bucket in memory
     NB = 64
-    tmp = CACHE / 'cs_buckets'
+    tmp = CACHE / f'{CS_CACHE.name}_buckets'
     if tmp.exists():
         for f in tmp.glob('*'):
             f.unlink()
