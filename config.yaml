@@ -67,3 +67,14 @@ backtest:
   wrds_dir: ../insider-wrds-data   # private repository with the WRDS extract (licensed; never commit it here)
   delisting_mode: shumway      # shumway (-30% NYSE/AMEX, -55% other), minus100 (stress test) or none
   price_mismatch_tolerance: 2.0 # Max ratio between insider trade price and market price before a ticker match is rejected
+
+# Daily paper-trading scanner (live_signals.py). Set to the recommended method once the backtest is final.
+live:
+  cluster_window_days: 30
+  cluster_min_insiders: 3
+  cluster_min_value: 200000
+  include_exec: false
+  exec_min_value: 200000
+  discretionary_only: false
+  exclude_insider_selling: false
+  dedupe_days: 90
