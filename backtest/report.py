@@ -368,6 +368,50 @@ def walkforward_chart(wfd, screen):
     return fig
 
 
+def control_chart(daily, hold='1y'):
+    fig = go.Figure()
+    styles = [('Big-drop clusters (insiders buying)', dict(color=SERIES[0], width=2.5), 'Big-drop clusters (insiders buying)'),
+              ('Control: same-day ≥50% drops, no insider cluster (equal weight per date)', dict(color=SERIES[1], width=2),
+               'Same-day ≥50% drops, no insiders')]
+    vals = []
+    for col, st, name in styles:
+        key = f'{col}|{hold}'
+        if key not in daily:
+            continue
+        r = daily[key].dropna()
+        w = 10_000 * (1 + r).cumprod()
+        vals += [w.min(), w.max()]
+        fig.add_trace(go.Scatter(x=w.index, y=w, name=name, line=st, hovertemplate=name + ': $%{y:,.0f}<extra></extra>'))
+    start = min(daily[f'{c}|{hold}'].first_valid_index() for c, _, _ in styles if f'{c}|{hold}' in daily)
+    for b in ('SPY', 'IWC'):
+        r = load_price(b)['adj_close'].pct_change().loc[start:].fillna(0)
+        w = 10_000 * (1 + r).cumprod()
+        vals += [w.min(), w.max()]
+        st = BENCH_STYLE.get(b, dict(color=MUTED, dash='dot'))
+        fig.add_trace(go.Scatter(x=w.index, y=w, name=b, line=dict(width=2, **st), hovertemplate=b + ': $%{y:,.0f}<extra></extra>'))
+    base_layout(fig, f'Is it the insiders or just the bounce-back? Big-drop clusters vs stocks that fell as far ({hold} hold)',
+                'Date', 'Growth of $10,000 (log scale)', height=480)
+    log_ticks(fig, vals)
+    return fig
+
+
+def track_chart(track, hold='1y'):
+    d = track[(track['hold'] == hold)]
+    fig = go.Figure()
+    for sc in ['cluster3', 'exec200k']:
+        x = d[d['screen'] == sc]
+        fig.add_trace(go.Bar(y=x['test'], x=x['full alpha'] * 100, orientation='h', name=SCREENS[sc][0],
+                             marker=dict(color=SCREEN_COLOR[sc], line=dict(color=SURFACE, width=2)),
+                             customdata=np.c_[x['full t'], x['signals'], x['2016+ signals alpha'] * 100],
+                             hovertemplate='%{y}<br>Alpha %{x:.1f}%/yr (t = %{customdata[0]:.2f}), %{customdata[1]:,} signals'
+                                           '<br>2016+ signals: %{customdata[2]:.1f}%/yr<extra></extra>'))
+    base_layout(fig, f'Insider track record ({hold} hold, realistic trading)', 'Alpha (% per year)', None, height=520)
+    fig.update_layout(barmode='group', hovermode='closest', margin=dict(l=300))
+    fig.update_xaxes(ticksuffix='%')
+    fig.add_vline(x=0, line=dict(color=AXIS, width=1))
+    return fig
+
+
 def decay_bars(alphas):
     holds = ['1m', '3m', '6m', '1y']
     fig = go.Figure()
@@ -600,6 +644,7 @@ def build(cfg=None):
                  f'Entry = next trading day\'s open. Prices: Yahoo Finance, adjusted for splits and dividends.</p>'
                  f'<nav><a href="#summary">Summary</a>{nav}<a href="#compare">Comparison</a><a href="#robust">Robustness</a>'
                  f'<a href="#realistic">Realistic trading</a><a href="#filters">Filter tests</a><a href="#combos">Combinations</a>'
+                 f'<a href="#stress">Stress tests</a><a href="#track">Track record</a>'
                  f'<a href="#data">Data &amp; coverage</a><a href="#method">Method</a></nav>')
 
     # Summary
@@ -859,6 +904,59 @@ def build(cfg=None):
         parts.append('<h3>What the walk-forward picked each year (6-month and 1-year holds)</h3>')
         parts.append(html_table(pk, {'Past alpha': pct, 'Past t': num, 'Signals traded': lambda v: f'{int(v):,}',
                                      'Year traded': lambda v: str(int(v))}))
+
+    if (RESULTS / 'bigdrop_stress.csv').exists():
+        st = pd.read_csv(RESULTS / 'bigdrop_stress.csv')
+        bs = pd.read_csv(RESULTS / 'bigdrop_bootstrap.csv')
+        hg = pd.read_csv(RESULTS / 'bigdrop_hedged.csv')
+        ct = pd.read_csv(RESULTS / 'bigdrop_control.csv')
+        tr = pd.read_csv(RESULTS / 'track_record.csv')
+        bd = pd.read_parquet(DATA / 'bigdrop_daily.parquet')
+        bd.index = pd.to_datetime(bd.index)
+        T.update({'bigdrop_stress': st, 'bigdrop_bootstrap': bs, 'bigdrop_hedged': hg, 'bigdrop_control': ct, 'track_record': tr})
+        parts.append('<h2 id="stress">Stress tests: cluster buys after a big drop</h2><p class="sub">Strategy: clusters of ≥3 '
+                     'insiders when the stock is down ≥50% over the prior 6 months; zero fees, full estimated spread, '
+                     'buy-and-hold, next-open entry. The tests and their rules were fixed before looking at the results.</p>')
+        s2 = st.copy()
+        s2 = s2[['hold', 'group', 'variant', 'signals', 'full alpha', 'full t', '2016+ alpha', '2016+ t', 'CAGR', 'max drawdown']]
+        s2.columns = ['Hold', 'Test', 'Variant', 'Signals', 'Alpha', 't', 'Alpha 2016+', 't 2016+', 'CAGR', 'Max drawdown']
+        parts.append('<h3>Leaving out crash episodes</h3>')
+        parts.append(html_table(s2, {'Alpha': pct, 't': num, 'Alpha 2016+': pct, 't 2016+': num, 'CAGR': pct,
+                                     'Max drawdown': pct, 'Signals': lambda v: f'{int(v):,}'}, color_cols=['Alpha', 'Alpha 2016+']))
+        b2 = bs[['hold', 'block', 'blocks', 'median alpha', 'p2.5 alpha', 'p97.5 alpha', 'share alpha ≤ 0']].copy()
+        b2.columns = ['Hold', 'Resampled by', 'Blocks', 'Median alpha', '2.5th percentile', '97.5th percentile', 'Share of draws ≤ 0']
+        parts.append('<h3>Bootstrap: how sure are we, given that signals bunch together?</h3><p class="note">Signals are '
+                     'resampled in whole months, quarters or years, so a crash counts as a few independent events rather than '
+                     'hundreds. If the 2.5th percentile is above zero, the edge survives this.</p>')
+        parts.append(html_table(b2, {'Median alpha': pct, '2.5th percentile': pct, '97.5th percentile': pct,
+                                     'Share of draws ≤ 0': pct, 'Blocks': lambda v: f'{int(v):,}'}))
+        h2 = hg[['hold', 'hedge', 'CAGR', 'volatility', 'Sharpe', 'max drawdown', 'alpha', 't', '2016+ CAGR']].copy()
+        h2.columns = ['Hold', 'Hedge', 'CAGR', 'Volatility', 'Sharpe', 'Max drawdown', 'Alpha', 't', 'CAGR 2016+']
+        parts.append('<h3>Hedged: is it stock-picking or just buying the small-cap rebound?</h3>')
+        parts.append(html_table(h2, {'CAGR': pct, 'Volatility': pct, 'Sharpe': num, 'Max drawdown': pct, 'Alpha': pct,
+                                     't': num, 'CAGR 2016+': pct}, color_cols=['CAGR', 'CAGR 2016+']))
+        parts.append(ch.add('bigdrop_control', control_chart(bd),
+                            'If insiders add information, the insider line should finish well above stocks that crashed just as '
+                            'much without insider buying. If the lines track each other, the edge is ordinary bounce-back.'))
+        c2 = ct[['hold', 'portfolio', 'positions', 'full alpha', 'full t', '2016+ alpha', '2016+ t', 'CAGR', 'max drawdown']].copy()
+        c2.columns = ['Hold', 'Portfolio', 'Positions', 'Alpha', 't', 'Alpha 2016+', 't 2016+', 'CAGR', 'Max drawdown']
+        parts.append(html_table(c2, {'Alpha': pct, 't': num, 'Alpha 2016+': pct, 't 2016+': num, 'CAGR': pct,
+                                     'Max drawdown': pct, 'Positions': lambda v: f'{int(v):,}'}, color_cols=['Alpha', 'Alpha 2016+']))
+
+        parts.append('<h2 id="track">Insider track record</h2><p class="sub">An insider is "proven" at a signal date if they have '
+                     'at least 2 earlier purchases whose 6-month outcome was already known, with an average 6-month return '
+                     'above SPY. Only information available at the time is used. Same realistic trading setup.</p>')
+        parts.append(ch.add('track_record', track_chart(tr),
+                            'If track record matters, "Includes a proven insider" and "Top third" should sit clearly to the right '
+                            'of "All signals", and "losing record" and "Bottom third" to the left.'))
+        t2 = tr.copy()
+        t2['Screen'] = t2['screen'].map(lambda k: SCREENS[k][0])
+        t2 = t2[['Screen', 'hold', 'test', 'signals', 'full alpha', 'full t', 'pre-2016 signals alpha', '2016+ signals alpha',
+                 '2016+ signals t']]
+        t2.columns = ['Screen', 'Hold', 'Test', 'Signals', 'Alpha', 't', 'Alpha, pre-2016 signals', 'Alpha, 2016+ signals', 't 2016+']
+        parts.append(html_table(t2, {'Alpha': pct, 't': num, 'Alpha, pre-2016 signals': pct, 'Alpha, 2016+ signals': pct,
+                                     't 2016+': num, 'Signals': lambda v: f'{int(v):,}'},
+                                color_cols=['Alpha', 'Alpha, 2016+ signals']))
 
     # Data & coverage
     parts.append('<h2 id="data">Data &amp; coverage</h2>')
