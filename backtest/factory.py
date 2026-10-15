@@ -234,6 +234,9 @@ def run(cfg=None):
     rf_m.index = rf_m.index.to_timestamp('M')
     R.index = R.index.to_period('M').to_timestamp('M')
     N.index = R.index
+    # the final partial month rolls onto the same month-end as the one before it: keep the first
+    dup = R.index.duplicated(keep='first')
+    R, N = R[~dup], N[~dup]
 
     def mperf(s, lab_sl):
         s = s.loc[lab_sl].dropna()
