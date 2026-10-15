@@ -230,6 +230,10 @@ def run(cfg=None):
             rfs = pd.Series(rf, index=idx)
             ls = (ps - pcn + rfs)[act]
             daily[f'{bk}|{h}|signal'], daily[f'{bk}|{h}|control'] = ps[act], pcn[act]
+            # unnormalised books: daily P&L per 1 unit put into each position at entry, and units held
+            daily[f'{bk}|{h}|signal_pnl'] = pd.Series(acc[(bk, h, 'signal')][0], index=idx)
+            daily[f'{bk}|{h}|control_pnl'] = pd.Series(acc[(bk, h, 'control')][0], index=idx)
+            daily[f'{bk}|{h}|units'] = pd.Series(acc[(bk, h, 'signal')][1], index=idx)
             for lab, sl in (('full', slice(None)), ('2016+', slice('2016-01-01', None))):
                 r = {'book': names[bk], 'hold': h, 'period': lab}
                 for side, ser in (('long signals', ps[act]), ('long matched', pcn[act]), ('long-short', ls)):

@@ -31,6 +31,11 @@ A5  (added later, rules fixed before running) SPY plus the hedged big-drop book 
     average of 2.7% per 6 months) while the book holds positions. Shorts are assumed to fund the longs.
     Reported against SPY: CAGR, volatility, Sharpe, max drawdown, all years / to 2015 / 2016+.
 
+A6  (added later, rules fixed before running) the same overlay with fixed sizing per trade: each signal
+    gets f of the portfolio long and f short across its 5 look-alikes (f/5 each), f = 2% and 3%,
+    set at entry and left to drift; borrow fee 5.4% a year on the short positions. With no signals the
+    book is empty and the portfolio is just SPY.
+
 A4  Entry month: the same big-drop per-trade edge for entries from 15 November to 31 December
     (tax-loss selling season) against all other months.
 """
@@ -258,6 +263,25 @@ def overlay(spy, rf):
     return pd.DataFrame(rows), curves
 
 
+def sized_overlay(spy, rf):
+    d = pd.read_parquet(DATA / 'matched_daily.parquet')
+    sig = d['drop50liq|6m|signal_pnl'].reindex(spy.index).fillna(0.0)
+    ctl = d['drop50liq|6m|control_pnl'].reindex(spy.index).fillna(0.0)
+    units = d['drop50liq|6m|units'].reindex(spy.index).fillna(0.0)
+    start = units.index[(units > 0).values][0]
+    rows, curves = [], {}
+    for f in (0.0, 0.02, 0.03):
+        # P&L per unit of each position, scaled to f of equity per position (approximation: equity at entry
+        # taken as current equity), fee on the short side's current value
+        p = (spy + f * (sig - ctl - units * 0.054 / 252)).loc[start:]
+        name = 'SPY only' if f == 0 else f'SPY + {f:.0%} per trade hedged book'
+        curves[name] = p
+        for lab, sl in (('full', slice(None)), ('to 2015', slice(None, '2015-12-31')), ('2016+', slice('2016-01-01', None))):
+            rows.append({'portfolio': name, 'period': lab, 'avg open trades': float(units.loc[start:].loc[sl].mean()),
+                         'max open trades': float(units.loc[start:].loc[sl].max()), **perf(p.loc[sl], rf)})
+    return pd.DataFrame(rows), curves
+
+
 def run(cfg=None):
     cfg = cfg or load_config()
     from .analysis import load_factors
@@ -271,6 +295,9 @@ def run(cfg=None):
     h_rows = hedged(cfg)
     o_rows, o_curves = overlay(spy, rf)
     o_rows.to_csv(RESULTS / 'overlay.csv', index=False)
+    z_rows, z_curves = sized_overlay(spy, rf)
+    z_rows.to_csv(RESULTS / 'overlay_sized.csv', index=False)
+    s_curves.update({f'sized|{k}': v for k, v in z_curves.items()})
     s_curves.update({f'overlay|{k}': v for k, v in o_curves.items()})
     RESULTS.mkdir(parents=True, exist_ok=True)
     t_rows.to_csv(RESULTS / 'timing.csv', index=False)
