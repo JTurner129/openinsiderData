@@ -230,3 +230,99 @@ def run(cfg=None):
 
 if __name__ == '__main__':
     run()
+
+
+# --- Large-cap tests (L1-L4) ----------------------------------------------------------------
+def officer_director_signals(min_value=100_000, window=30, dedupe=90, min_insiders=1):
+    """First day each company's officer/director open-market buys reach min_value (and min_insiders) in a
+    trailing window of filing dates; a company can signal again only `dedupe` days later."""
+    pc = pd.read_parquet(DATA / 'purchases_clean.parquet',
+                         columns=['accession_number', 'issuer_cik', 'ticker', 'filing_date', 'value_clean', 'insider_id'])
+    it = pd.read_parquet(DATA / 'insider_trades.parquet', columns=['accession_number', 'is_director', 'is_officer'])
+    pc = pc.merge(it, on='accession_number')
+    pc = pc[(pc['is_director'] | pc['is_officer']) & pc['value_clean'].notna()]
+    pc['filing_date'] = pd.to_datetime(pc['filing_date']).dt.normalize()
+    out = []
+    for cik, g in pc.sort_values('filing_date').groupby('issuer_cik'):
+        d, v, ins = g['filing_date'].values, g['value_clean'].values, g['insider_id'].values
+        last = None
+        for i in range(len(g)):
+            if last is not None and (d[i] - last) / np.timedelta64(1, 'D') <= dedupe:
+                continue
+            lo = np.searchsorted(d, d[i] - np.timedelta64(window - 1, 'D'), 'left')
+            if v[lo:i + 1].sum() >= min_value and len(set(ins[lo:i + 1])) >= min_insiders:
+                out.append({'issuer_cik': cik, 'signal_date': pd.Timestamp(d[i]), 'ticker': g['ticker'].iloc[i],
+                            'n_insiders': len(set(ins[lo:i + 1])), 'value': v[lo:i + 1].sum()})
+                last = d[i]
+    return pd.DataFrame(out)
+
+
+def members_on(dates_gvkeys, index_ids, cfg):
+    m = pd.read_parquet(wrds_dir(cfg) / 'compustat_index_members.parquet')
+    m = m[m['gvkeyx'].isin(index_ids)].copy()
+    m['from'] = pd.to_datetime(m['from'], errors='coerce')
+    m['thru'] = pd.to_datetime(m['thru'], errors='coerce').fillna(pd.Timestamp('2100-01-01'))
+    by = {k: g for k, g in m.groupby('gvkey')}
+    res = []
+    for k, d in dates_gvkeys:
+        g = by.get(k)
+        res.append(bool(g is not None and ((g['from'] <= d) & (g['thru'] >= d)).any()))
+    return np.array(res)
+
+
+def largecap_run(cfg=None):
+    cfg = cfg or load_config()
+    from .combos import SubsetEngine
+    from .compustat import match_signals
+    from .filters import Market
+    from .prices import load_price
+    from .analysis import load_factors
+    from .strategies import perf
+    spy_px = load_price('SPY')
+    cal = spy_px.index.values
+    idx = pd.DatetimeIndex(cal)
+    spy = spy_px['adj_close'].pct_change().reindex(idx).fillna(0.0)
+    rf = load_factors(cfg)['RF'].reindex(idx).ffill().fillna(0.0)
+    market = Market(cal)
+    q = quarterly_table(cfg)
+    rows, curves, counts = [], {}, {}
+    for label, min_ins in (('any', 1), ('cluster', 2)):
+        S = officer_director_signals(min_insiders=min_ins)
+        S['price_ticker'] = match_signals(S, cfg)
+        S = S.dropna(subset=['price_ticker']).reset_index(drop=True)
+        S['gvkey'] = S['price_ticker'].str.split('_').str[1]
+        S['entry_date'] = [idx[min(np.searchsorted(cal, np.datetime64(d), 'right'), len(idx) - 1)] for d in S['signal_date']]
+        S[['sue', 'leverage', 'q_public']] = asof(S, q, ['sue', 'leverage'], max_age=200).values
+        S['q_public'] = pd.to_datetime(S['q_public'])
+        S['sue_recent'] = S['sue'].where((S['signal_date'] - S['q_public']).dt.days <= 90)
+        pairs = list(zip(S['gvkey'], S['signal_date']))
+        S['sp500'] = members_on(pairs, ['000003'], cfg)
+        S['sp400'] = members_on(pairs, ['024248'], cfg)
+        tests = {('L1 S&P 500, officer/director buy >= $100K' if label == 'any' else 'L3 S&P 500, 2+ insiders'): S['sp500'],
+                 ('L2 S&P 500 + positive earnings surprise' if label == 'any' else 'L3b S&P 500, 2+ insiders + positive surprise'):
+                     S['sp500'] & (S['sue_recent'] > 0)}
+        if label == 'any':
+            tests['L4 S&P MidCap 400, officer/director buy >= $100K'] = S['sp400']
+        for hn, hd in (('6m', 126), ('1y', 252)):
+            eng = SubsetEngine(S, market, hd, 0.001 + 2 * FX)
+            for name, m in tests.items():
+                p = eng.returns(np.asarray(m, float), rf.values)
+                if p is None:
+                    continue
+                p = p.reindex(idx)
+                act = p.notna()
+                p = p.where(act, spy).loc[act[act].index[0]:]
+                curves[f'{name}|{hn}'] = p
+                counts[name] = int(np.sum(m))
+                for lab, sl in (('all', slice(None)), ('2006–15', slice(None, '2015-12-31')), ('2016+', slice('2016-01-01', None))):
+                    s_, b_ = perf(p.loc[sl], rf), perf(spy.loc[p.index[0]:].loc[sl], rf)
+                    rows.append({'test': name, 'hold': hn, 'period': lab, 'signals': int(np.sum(m)),
+                                 'CAGR': s_.get('CAGR'), 'SPY CAGR': b_.get('CAGR'), 'Sharpe': s_.get('Sharpe'),
+                                 'SPY Sharpe': b_.get('Sharpe'), 'max DD': s_.get('max drawdown'),
+                                 'SPY max DD': b_.get('max drawdown')})
+        save_table(S, DATA / f'largecap_signals_{label}')
+    r = pd.DataFrame(rows)
+    r.to_csv(RESULTS / 'largecap_tests.csv', index=False)
+    pd.DataFrame(curves).to_parquet(DATA / 'largecap_daily.parquet')
+    LOG.info('largecap: done')
+    return r
