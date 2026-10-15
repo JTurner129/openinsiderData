@@ -38,6 +38,13 @@ Added later (rules fixed before running), the large-cap test:
   L2 L1 restricted to a positive earnings surprise in the prior 90 days.
   L3 L1 restricted to clusters (>= 2 insiders buying within 30 days).
   L4 Same as L1 for S&P MidCap 400 members.
+Added later (rules fixed before running), the Nasdaq 100 test:
+  N1 Nasdaq 100 members (at the signal date) where an officer or director filed an open-market purchase of
+     >= $100K in the prior 30 days; equal weight; 6-month and 1-year holds; money not in signals is in QQQ.
+  N2 N1 restricted to a positive earnings surprise in the prior 90 days.
+  N3 N1 restricted to 2+ insiders buying within 30 days.
+  Benchmarks: QQQ, and an equal-weight Nasdaq 100 built from the same membership history (members on the
+  first trading day of each month, equal weight, rebalanced monthly, same prices).
 """
 import numpy as np
 import pandas as pd
@@ -325,4 +332,90 @@ def largecap_run(cfg=None):
     r.to_csv(RESULTS / 'largecap_tests.csv', index=False)
     pd.DataFrame(curves).to_parquet(DATA / 'largecap_daily.parquet')
     LOG.info('largecap: done')
+    return r
+
+
+def equal_weight_index(index_id, cfg, idx):
+    """Equal-weight index of members on the first trading day of each month, rebalanced monthly."""
+    from .prices import load_price
+    m = pd.read_parquet(wrds_dir(cfg) / 'compustat_index_members.parquet')
+    m = m[m['gvkeyx'] == index_id].copy()
+    m['from'] = pd.to_datetime(m['from'], errors='coerce')
+    m['thru'] = pd.to_datetime(m['thru'], errors='coerce').fillna(pd.Timestamp('2100-01-01'))
+    m['sec'] = 'CS_' + m['gvkey'].astype(str) + '_' + m['iid'].astype(str)
+    rets = {}
+    for sec in m['sec'].unique():
+        px = load_price(sec)
+        if px is not None and not px.empty:
+            rets[sec] = px['adj_close'].pct_change().reindex(idx)
+    R = pd.DataFrame(rets)
+    out = pd.Series(np.nan, index=idx)
+    months = idx.to_period('M')
+    for per in pd.unique(months):
+        days = idx[months == per]
+        d0 = days[0]
+        mem = m[(m['from'] <= d0) & (m['thru'] >= d0) & m['sec'].isin(R.columns)]['sec'].unique()
+        if len(mem) < 20:
+            continue
+        sub = R.loc[days, mem].fillna(0.0)
+        v = (1 + sub).cumprod()
+        port = v.mean(axis=1)
+        out.loc[days] = (port / port.shift(1).fillna(1.0) - 1).values
+    return out, R.shape[1]
+
+
+def nasdaq_run(cfg=None):
+    cfg = cfg or load_config()
+    from .combos import SubsetEngine
+    from .compustat import match_signals
+    from .filters import Market
+    from .prices import load_price
+    from .analysis import load_factors
+    from .strategies import perf
+    spy_px = load_price('SPY')
+    cal = spy_px.index.values
+    idx = pd.DatetimeIndex(cal)
+    qqq = load_price('QQQ')['adj_close'].pct_change().reindex(idx).fillna(0.0)
+    rf = load_factors(cfg)['RF'].reindex(idx).ffill().fillna(0.0)
+    ew, n_sec = equal_weight_index('000208', cfg, idx)
+    LOG.info(f'nasdaq: equal-weight Nasdaq 100 from {n_sec} securities')
+    market = Market(cal)
+    q = quarterly_table(cfg)
+    rows, curves = [], {'QQQ': qqq, 'Equal-weight Nasdaq 100': ew}
+    for label, min_ins in (('any', 1), ('cluster', 2)):
+        S = officer_director_signals(min_insiders=min_ins)
+        S['price_ticker'] = match_signals(S, cfg)
+        S = S.dropna(subset=['price_ticker']).reset_index(drop=True)
+        S['gvkey'] = S['price_ticker'].str.split('_').str[1]
+        S['entry_date'] = [idx[min(np.searchsorted(cal, np.datetime64(d), 'right'), len(idx) - 1)] for d in S['signal_date']]
+        S[['sue', 'leverage', 'q_public']] = asof(S, q, ['sue', 'leverage'], max_age=200).values
+        S['q_public'] = pd.to_datetime(S['q_public'])
+        S['sue_recent'] = S['sue'].where((S['signal_date'] - S['q_public']).dt.days <= 90)
+        S['ndx'] = members_on(list(zip(S['gvkey'], S['signal_date'])), ['000208'], cfg)
+        tests = ({'N1 Nasdaq 100, officer/director buy >= $100K': S['ndx'],
+                  'N2 Nasdaq 100 + positive earnings surprise': S['ndx'] & (S['sue_recent'] > 0)}
+                 if label == 'any' else {'N3 Nasdaq 100, 2+ insiders': S['ndx']})
+        for hn, hd in (('6m', 126), ('1y', 252)):
+            eng = SubsetEngine(S, market, hd, 0.001 + 2 * FX)
+            for name, msk in tests.items():
+                p = eng.returns(np.asarray(msk, float), rf.values)
+                if p is None:
+                    continue
+                p = p.reindex(idx)
+                act = p.notna()
+                p = p.where(act, qqq).loc[act[act].index[0]:]
+                curves[f'{name}|{hn}'] = p
+                for lab, sl in (('all', slice(None)), ('2006–15', slice(None, '2015-12-31')), ('2016+', slice('2016-01-01', None))):
+                    s_ = perf(p.loc[sl], rf)
+                    b_ = perf(qqq.loc[p.index[0]:].loc[sl], rf)
+                    e_ = perf(ew.loc[p.index[0]:].loc[sl].dropna(), rf)
+                    rows.append({'test': name, 'hold': hn, 'period': lab, 'signals': int(np.sum(msk)),
+                                 'CAGR': s_.get('CAGR'), 'QQQ CAGR': b_.get('CAGR'), 'EW NDX CAGR': e_.get('CAGR'),
+                                 'Sharpe': s_.get('Sharpe'), 'QQQ Sharpe': b_.get('Sharpe'), 'EW NDX Sharpe': e_.get('Sharpe'),
+                                 'max DD': s_.get('max drawdown'), 'QQQ max DD': b_.get('max drawdown'),
+                                 'days invested in signals': float(act.loc[p.index[0]:].loc[sl].mean())})
+    r = pd.DataFrame(rows)
+    r.to_csv(RESULTS / 'nasdaq_tests.csv', index=False)
+    pd.DataFrame(curves).to_parquet(DATA / 'nasdaq_daily.parquet')
+    LOG.info('nasdaq: done')
     return r
