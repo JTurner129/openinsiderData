@@ -1028,10 +1028,16 @@ def build(cfg=None):
         cp2 = RESULTS / 'matched_controls_calendar.csv'
         if cp2.exists():
             cc = pd.read_csv(cp2)
-            cc.columns = ['Hold', 'Period', 'Long clusters / short matched alpha', 't']
-            parts.append('<h3>Calendar time: long cluster signals, short their matched baskets</h3>' +
-                         html_table(cc, {'Long clusters / short matched alpha': pct, 't': num},
-                                    color_cols=['Long clusters / short matched alpha']))
+            cc = cc[['book', 'hold', 'period', 'long signals alpha', 'long signals t', 'long matched alpha', 'long matched t',
+                     'long-short alpha', 'long-short t', 'long signals CAGR', 'long matched CAGR']]
+            cc.columns = ['Signals', 'Hold', 'Period', 'Signals alpha', 't', 'Matched alpha', 't ', 'Long-short alpha',
+                          't  ', 'Signals CAGR', 'Matched CAGR']
+            parts.append('<h3>Calendar time: cluster signals vs their matched baskets</h3><p class="note">Buy-and-hold '
+                         'portfolios built the same way on both sides. Long-short = signals minus matched baskets, '
+                         'before any cost of shorting.</p>' +
+                         html_table(cc, {'Signals alpha': pct, 'Matched alpha': pct, 'Long-short alpha': pct,
+                                         't': num, 't ': num, 't  ': num, 'Signals CAGR': pct, 'Matched CAGR': pct},
+                                    color_cols=['Long-short alpha']))
 
     # Data & coverage
     parts.append('<h2 id="data">Data &amp; coverage</h2>')

@@ -130,7 +130,8 @@ def run(cfg=None):
         logM = np.log(np.where(M > 0, M, np.nan))
 
     rows = []
-    acc = {(h, side): (np.zeros(T), np.zeros(T)) for h in HOLDS for side in ('signal', 'control')}
+    BOOKS = ('all', 'drop50', 'pb1')
+    acc = {(b, h, side): (np.zeros(T), np.zeros(T)) for b in BOOKS for h in HOLDS for side in ('signal', 'control')}
     by_day = F.groupby(F['entry_date'].map(lambda d: int(np.searchsorted(cal, np.datetime64(d), 'left'))))
     for n, (m, g) in enumerate(by_day):
         if m - 1 - LOOK < 0 or m >= T:
@@ -175,11 +176,14 @@ def run(cfg=None):
                 if s['screen'] != 'cluster3':
                     continue
                 end = m + len(rs)
+                books = ['all'] + (['drop50'] if ret6[j0] <= -0.5 else []) + \
+                    (['pb1'] if np.isfinite(pb[j0]) and np.exp(pb[j0]) <= 1 else [])
                 for side, r in (('signal', rs[:, None]), ('control', rc)):
-                    num, den = acc[(h, side)]
                     v = np.vstack([np.ones((1, r.shape[1])), np.cumprod(1 + r, axis=0)[:-1]])
-                    num[m:end] += (v * r).sum(axis=1) / r.shape[1]
-                    den[m:end] += v.sum(axis=1) / r.shape[1]
+                    for bk in books:
+                        num, den = acc[(bk, h, side)]
+                        num[m:end] += (v * r).sum(axis=1) / r.shape[1]
+                        den[m:end] += v.sum(axis=1) / r.shape[1]
             rows.append(rec)
         if n % 500 == 0:
             LOG.info(f'matched: {n:,}/{len(by_day):,} entry days, {len(rows):,} signals matched')
@@ -213,14 +217,25 @@ def run(cfg=None):
                     r[f'{lab} edge'], r[f'{lab} t'], r[f'{lab} n'] = mu, t, nn
                 out.append(r)
     # Calendar-time long cluster signals / short their matched controls
-    ct = []
-    for h in HOLDS:
-        ps, pcn = series(*acc[(h, 'signal')]), series(*acc[(h, 'control')])
-        act = acc[(h, 'signal')][1] > 0
-        ls = (ps - pcn + pd.Series(rf, index=idx))[act]
-        for lab, sl in (('full', slice(None)), ('2016+', slice('2016-01-01', None))):
-            a, t, _ = scorer.score(ls.loc[sl])
-            ct.append({'hold': h, 'period': lab, 'long signals / short matched controls alpha': a, 't': t})
+    ct, daily = [], {}
+    names = {'all': 'All cluster signals', 'drop50': 'Clusters after a ≥50% drop', 'pb1': 'Clusters at price-to-book ≤ 1'}
+    from .robust import perf
+    for bk in BOOKS:
+        for h in HOLDS:
+            ps, pcn = series(*acc[(bk, h, 'signal')]), series(*acc[(bk, h, 'control')])
+            act = acc[(bk, h, 'signal')][1] > 0
+            rfs = pd.Series(rf, index=idx)
+            ls = (ps - pcn + rfs)[act]
+            daily[f'{bk}|{h}|signal'], daily[f'{bk}|{h}|control'] = ps[act], pcn[act]
+            for lab, sl in (('full', slice(None)), ('2016+', slice('2016-01-01', None))):
+                r = {'book': names[bk], 'hold': h, 'period': lab}
+                for side, ser in (('long signals', ps[act]), ('long matched', pcn[act]), ('long-short', ls)):
+                    a, t, _ = scorer.score(ser.loc[sl])
+                    r[f'{side} alpha'], r[f'{side} t'] = a, t
+                r['long signals CAGR'] = perf(ps[act].loc[sl], factors['RF']).get('CAGR')
+                r['long matched CAGR'] = perf(pcn[act].loc[sl], factors['RF']).get('CAGR')
+                ct.append(r)
+    pd.DataFrame(daily).to_parquet(DATA / 'matched_daily.parquet')
     res = pd.DataFrame(out)
     RESULTS.mkdir(parents=True, exist_ok=True)
     res.to_csv(RESULTS / 'matched_controls.csv', index=False)
