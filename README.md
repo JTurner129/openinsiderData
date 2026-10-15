@@ -149,9 +149,25 @@ Important: the control group earns *more* than the insider strategy, which point
 Yahoo price data (crashed stocks still listed are the ones that recovered). Treat big-drop results as unproven
 until rerun with delisted-stock prices.
 
+## Survivorship-free rerun on Compustat (WRDS)
+
+The final results use Compustat Security Daily from WRDS, which keeps delisted stocks. WRDS data is licensed, so it lives in a separate private repository, never in this one.
+
+1. On WRDS, run `wrds/extract_wrds.py` (add `--all-us` for the full US universe used by the control groups) and copy the Parquet files into a private folder.
+2. Set `backtest.price_source: compustat` and `backtest.wrds_dir` in `config.yaml`.
+3. Run with outputs written into that private folder: `BACKTEST_OUTPUT=../insider-wrds-data/backtest_outputs python run_backtest.py 3 4 5 6 7`.
+4. Extra tests: `python -c "from backtest import filings; filings.run()"` (insider sales, Form 4 footnotes and 8-K items, rules fixed in the module docstring before the data were downloaded) and `python -c "from backtest import matched; matched.run()"` (each signal against its 5 nearest look-alike stocks).
+5. Worst case for delistings: `DELIST_MODE=minus100` (default assumes −30% NYSE/AMEX, −55% other).
+
+**Result.** With dead companies included, no long-only insider screen beats SPY after realistic costs. The one robust effect: clusters of ≥3 insiders buying ≥$200K in a stock down ≥50% over 6 months (and trading ≥$100K a day) beat look-alike crashed stocks by about 10% per 6-month trade (t 3.8), including 2016+ and under the −100% delisting assumption.
+
+## Daily scanner (paper trading)
+
+`live_signals.py` reads each day's Form 4 filings from SEC EDGAR, applies the rules under `live:` in `config.yaml`, and appends new signals to `live/signals_log.csv`. First run `python live_signals.py --days 30`, then once a day `python live_signals.py`. The crash and volume filters use Yahoo prices via `yfinance`.
+
 ## Known limitations
 
-- **Survivorship bias (the big one).** Yahoo lacks most delisted stocks. Only about 40-55% of signals could be priced overall, and under 30% for 2006-2011. Those signals are reported as missing, not dropped, but the priced sample leans toward survivors, which flatters returns. For a cleaner test, swap Phase 3 to a source with delisted history: Norgate Data (paid), Tiingo or EODHD (API key; free tiers are too small for ~8,000 tickers), or CRSP via WRDS (academic). Only `backtest/prices.py` needs to change: write the same per-ticker Parquet files (`adj_open`, `adj_close`, `raw_close`, `volume`) into `.cache/prices/`.
+- **Survivorship bias in the Yahoo run (fixed by the Compustat rerun above).** Yahoo lacks most delisted stocks. Only about 40-55% of signals could be priced overall, and under 30% for 2006-2011. Those signals are reported as missing, not dropped, but the priced sample leans toward survivors, which flatters returns. For a cleaner test, swap Phase 3 to a source with delisted history: Norgate Data (paid), Tiingo or EODHD (API key; free tiers are too small for ~8,000 tickers), or CRSP via WRDS (academic). Only `backtest/prices.py` needs to change: write the same per-ticker Parquet files (`adj_open`, `adj_close`, `raw_close`, `volume`) into `.cache/prices/`.
 - **Microcaps.** Many signals are small, illiquid stocks. Requiring a price of at least $2 at entry cuts alpha substantially (see the report's robustness section). Equal-weight daily rebalancing of illiquid stocks also overstates achievable returns (bid-ask bounce), and 0.5% round-trip costs are optimistic for the smallest names.
 - SEC bulk data starts in 2006, so 2003–2005 (which OpenInsider partly covers) is not included.
 - Yahoo data occasionally has bad prints; no outlier trimming is applied to returns (the report shows means and medians side by side).
