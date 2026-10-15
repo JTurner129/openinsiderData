@@ -66,6 +66,10 @@ class SubsetEngine:
         self.num = sparse.csr_matrix((np.concatenate(num), (rows, cols)), shape=shape)
         self.den = sparse.csr_matrix((np.concatenate(den), (rows, cols)), shape=shape)
 
+    def active(self, mask):
+        """Boolean per calendar day: does the subset hold any position that day?"""
+        return np.asarray(self.den.T @ np.asarray(mask, dtype=float)).ravel() > 0
+
     def returns(self, mask, rf):
         w = np.asarray(mask, dtype=float)
         n = self.num.T @ w

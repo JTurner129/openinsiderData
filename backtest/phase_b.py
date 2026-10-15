@@ -316,9 +316,8 @@ def largecap_run(cfg=None):
                 p = eng.returns(np.asarray(m, float), rf.values)
                 if p is None:
                     continue
-                p = p.reindex(idx)
-                act = p.notna()
-                p = p.where(act, spy).loc[act[act].index[0]:]
+                act = pd.Series(eng.active(m), index=idx)
+                p = p.reindex(idx).where(act, spy).loc[act[act].index[0]:]
                 curves[f'{name}|{hn}'] = p
                 counts[name] = int(np.sum(m))
                 for lab, sl in (('all', slice(None)), ('2006–15', slice(None, '2015-12-31')), ('2016+', slice('2016-01-01', None))):
@@ -401,9 +400,8 @@ def nasdaq_run(cfg=None):
                 p = eng.returns(np.asarray(msk, float), rf.values)
                 if p is None:
                     continue
-                p = p.reindex(idx)
-                act = p.notna()
-                p = p.where(act, qqq).loc[act[act].index[0]:]
+                act = pd.Series(eng.active(msk), index=idx)
+                p = p.reindex(idx).where(act, qqq).loc[act[act].index[0]:]
                 curves[f'{name}|{hn}'] = p
                 for lab, sl in (('all', slice(None)), ('2006–15', slice(None, '2015-12-31')), ('2016+', slice('2016-01-01', None))):
                     s_ = perf(p.loc[sl], rf)
