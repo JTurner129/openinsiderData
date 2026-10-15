@@ -80,8 +80,14 @@ def french_daily():
         return pd.read_parquet(path)
     from .industry_momentum import _first_block
     f5 = _first_block(FRENCH + 'F-F_Research_Data_5_Factors_2x3_daily_CSV.zip', daily=True)
-    mo = _first_block(FRENCH + 'F-F_Momentum_Factor_daily_CSV.zip', daily=True)
-    mo.columns = ['UMD']
+    raw = requests.get(FRENCH + 'F-F_Momentum_Factor_daily_CSV.zip', timeout=180).content
+    z = zipfile.ZipFile(io.BytesIO(raw))
+    rows = []
+    for l in z.read(z.namelist()[0]).decode('latin-1').splitlines():
+        p = [x.strip() for x in l.split(',')]
+        if len(p) >= 2 and p[0].isdigit() and len(p[0]) == 8:
+            rows.append((pd.Timestamp(p[0]), float(p[1]) / 100))
+    mo = pd.DataFrame(rows, columns=['date', 'UMD']).set_index('date')
     f = f5.join(mo, how='inner')
     f.to_parquet(path)
     return f
