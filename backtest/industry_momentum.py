@@ -31,7 +31,7 @@ def _first_block(url, daily=False):
     raw = requests.get(url, timeout=180).content
     z = zipfile.ZipFile(io.BytesIO(raw))
     lines = z.read(z.namelist()[0]).decode('latin-1').splitlines()
-    hdr = next(i for i, l in enumerate(lines) if l.strip().startswith(',') and len(l.split(',')) > 5)
+    hdr = next(i for i, l in enumerate(lines) if l.strip().startswith(',') and len(l.split(',')) >= 4)
     cols = [c.strip() for c in lines[hdr].split(',')[1:]]
     rows = []
     n = 8 if daily else 6
