@@ -40,11 +40,11 @@ def get_logger(name):
     return logger
 
 
-def save_table(df, path_stem, index=False):
-    """Write a DataFrame as both CSV and Parquet."""
+def save_table(df, path_stem, index=False, gzip_csv=False):
+    """Write a DataFrame as both CSV (gzipped if asked, to stay under GitHub's file limit) and Parquet."""
     path_stem = Path(path_stem)
     path_stem.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path_stem.with_suffix('.csv'), index=index)
+    df.to_csv(path_stem.with_suffix('.csv.gz' if gzip_csv else '.csv'), index=index)
     out = df.reset_index() if index else df
     # Parquet needs plain column names and no mixed object columns
     out = out.copy()

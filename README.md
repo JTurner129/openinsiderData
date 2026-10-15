@@ -30,13 +30,20 @@ export SEC_USER_AGENT="your-name your-email@example.com"   # SEC requires a cont
 python run_backtest.py          # all phases
 python run_backtest.py 3 4 5 6  # just some phases, re-using earlier outputs
 python -m pytest tests          # title regex and fund-filter tests
+node tests/check_report.mjs     # opens report.html in headless Chromium; fails on empty charts/tables
 ```
+
+The Yahoo price panel (`data/prices.parquet`, `data/prices.csv.gz`) is **not committed**: it is
+~190 MB and Yahoo's terms do not allow redistributing it. `python run_backtest.py 3` rebuilds it
+(about 30-60 minutes; Yahoo throttles, and the downloader backs off automatically). Everything
+else in `data/` and `results/` is committed. The largest CSVs are gzipped (`.csv.gz`) to stay
+under GitHub's file-size limit; pandas and Excel's Power Query read them directly.
 
 | Phase | Command | What it does | Output |
 |---|---|---|---|
-| 1 Data | `python run_backtest.py 1` | Downloads every SEC quarterly Form 4 data set, keeps code `P` purchases, one row per filing | `data/insider_trades.parquet` (+ `.csv`), `data/scrape_summary.json` |
+| 1 Data | `python run_backtest.py 1` | Downloads every SEC quarterly Form 4 data set, keeps code `P` purchases, one row per filing | `data/insider_trades.parquet` (+ `.csv.gz`), `data/scrape_summary.json` |
 | 2 Signals | `python run_backtest.py 2` | Cleans values, looks up SIC codes, builds the five screens and de-duplicates | `data/signals.*`, `data/signals_all_variants.*`, `data/excluded_funds_trusts.*` |
-| 3 Prices | `python run_backtest.py 3` | Adjusted daily prices from Yahoo for every signal ticker plus SPY and IWM | `data/prices.parquet`, `data/prices.csv.gz` |
+| 3 Prices | `python run_backtest.py 3` | Adjusted daily prices from Yahoo for every signal ticker, each company's current SEC ticker, SPY and IWM | `data/prices.parquet`, `data/prices.csv.gz` (not committed), `data/price_cleaning.json`, `data/alternate_tickers.json` |
 | 4 Returns | `python run_backtest.py 4` | Per-signal returns at 1w/1m/3m/6m/1y, excess vs SPY and IWM, after costs | `data/trade_returns.*`, `data/trade_returns_all_variants.*` |
 | 5 Analysis | `python run_backtest.py 5` | Event study, calendar-time portfolios, CAPM and FF5+momentum alphas, robustness | `results/*.csv`, `data/portfolio_daily_returns.*` |
 | 6 Report | `python run_backtest.py 6` | Builds `report.html`, PNG charts and `results/results.xlsx` | `report.html`, `results/` |
@@ -83,6 +90,8 @@ Each company can signal at most once per screen every 90 days (`dedupe_days`).
 - A horizon is reported only once it has fully elapsed; recent signals have partial horizons (`partial_horizons` = True).
 - If a stock stops trading before the horizon, its last close is used and `truncated_<h>` is set.
 - Ticker check: Yahoo's split-unadjusted price at entry must be within 2× of the insiders' average purchase price. Otherwise the ticker probably belongs to a different company now, and the signal is marked `price_mismatch` (missing), not used.
+- Ticker changes: if the ticker on the filing fails, the company's current tickers from the SEC (`company_tickers.json`, by CIK) are tried in turn, with the same entry and price-match checks. `price_ticker` and `ticker_source` (`filing` or `sec_current`) record which was used; the report shows e.g. `OLD → NEW`.
+- Bad prints in Yahoo data are cleaned when prices are loaded (`clean_bad_prints` in `backtest/prices.py`): days with a zero price are dropped; a one-day move of ≥5× that reverses by ≥5× the next day is replaced by the prior close; a one-day **rise** of ≥10× that persists is treated as an unadjusted reverse split and earlier history is rescaled; opens more than 5× from the day's close are replaced by the close. Drops are never "corrected", so real crashes always count. Counts are in `data/price_cleaning.json` and the report.
 - Signals without prices are never silently dropped: every signal is in `data/trade_returns.*` with a `price_status` (`ok`, `no_ticker`, `ticker_not_found`, `no_price_at_entry`, `price_mismatch`, `not_yet_entered`), and the report shows the % missing per screen per year.
 - Costs: 0.5% round trip, applied as (1 + r) × (1 − 0.005) − 1.
 - Liquidity filter: off by default (`min_entry_price: 0`); the robustness section shows the effect of requiring a price ≥ $2 at entry.
@@ -92,10 +101,12 @@ Each company can signal at most once per screen every 90 days (`dedupe_days`).
 - Calendar-time portfolios: each trading day, equal weight in every stock still within its holding period (1m, 3m, 6m, 1y), entry-day return = close ÷ open. Days with no positions earn the risk-free rate.
 - Sharpe and Sortino use the Fama-French risk-free rate. Alphas regress daily portfolio excess returns on Mkt-RF (CAPM) and on Mkt-RF, SMB, HML, RMW, CMA and UMD from Kenneth French's data library, with Newey-West (5 lag) standard errors, annualized ×252. The French data ends a month or two before today, so the regressions stop there.
 - Eras: pre-2010 (2006–2009), 2010–2019, 2020+.
+- De-dupe windows of 0 and 30 days give identical cluster signals, because a cluster can only fire again after its 30-day condition has lapsed anyway.
 
 ## Known limitations
 
-- **Survivorship bias.** Yahoo lacks most delisted stocks. Those signals are reported as missing, and the priced sample leans toward survivors, which flatters returns. For a cleaner test, swap Phase 3 to a source with delisted history (Norgate Data, Tiingo, EODHD or CRSP).
+- **Survivorship bias (the big one).** Yahoo lacks most delisted stocks. Only about 40-55% of signals could be priced overall, and under 30% for 2006-2011. Those signals are reported as missing, not dropped, but the priced sample leans toward survivors, which flatters returns. For a cleaner test, swap Phase 3 to a source with delisted history: Norgate Data (paid), Tiingo or EODHD (API key; free tiers are too small for ~8,000 tickers), or CRSP via WRDS (academic). Only `backtest/prices.py` needs to change: write the same per-ticker Parquet files (`adj_open`, `adj_close`, `raw_close`, `volume`) into `.cache/prices/`.
+- **Microcaps.** Many signals are small, illiquid stocks. Requiring a price of at least $2 at entry cuts alpha substantially (see the report's robustness section). Equal-weight daily rebalancing of illiquid stocks also overstates achievable returns (bid-ask bounce), and 0.5% round-trip costs are optimistic for the smallest names.
 - SEC bulk data starts in 2006, so 2003–2005 (which OpenInsider partly covers) is not included.
 - Yahoo data occasionally has bad prints; no outlier trimming is applied to returns (the report shows means and medians side by side).
 

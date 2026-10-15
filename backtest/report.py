@@ -41,10 +41,11 @@ def num(x, d=2):
 
 def base_layout(fig, title, xtitle=None, ytitle=None, height=420):
     fig.update_layout(
-        title=dict(text=title, x=0, xanchor='left', font=dict(size=16, color=INK)),
+        title=dict(text=title, x=0, xanchor='left', y=0.985, yref='container', yanchor='top',
+                   font=dict(size=16, color=INK)),
         font=dict(family=FONT, size=12, color=INK2), paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
-        height=height, margin=dict(l=60, r=20, t=60, b=50), hovermode='x unified',
-        legend=dict(orientation='h', yanchor='bottom', y=1.0, xanchor='right', x=1, font=dict(color=INK2)),
+        height=height + 40, margin=dict(l=60, r=20, t=110, b=50), hovermode='x unified',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='left', x=0, font=dict(color=INK2)),
         hoverlabel=dict(bgcolor='white', font=dict(family=FONT, color=INK)))
     fig.update_xaxes(title=xtitle, gridcolor=GRID, linecolor=AXIS, zerolinecolor=AXIS, tickfont=dict(color=MUTED))
     fig.update_yaxes(title=ytitle, gridcolor=GRID, linecolor=AXIS, zerolinecolor=AXIS, tickfont=dict(color=MUTED))
@@ -111,7 +112,6 @@ def heatmap(es, screen, min_n):
     fig.update_yaxes(tickvals=yi, ticktext=years, autorange='reversed', gridcolor='rgba(0,0,0,0)', zeroline=False)
     fig.update_xaxes(tickvals=xi, ticktext=HORIZONS, gridcolor='rgba(0,0,0,0)', side='top', zeroline=False,
                      title='Horizon after entry')
-    fig.update_layout(margin=dict(t=110))
     return fig
 
 
@@ -297,41 +297,53 @@ def signal_table_json(trades, screen):
 
 
 # --- Narrative -------------------------------------------------------------------
-def summary_bullets(head, es, alphas, miss, era):
+def summary_bullets(head, es, alphas, miss, T):
+    """Plain-English findings, computed from the result tables."""
     b = []
     sig = head[head['Significant'] == '✓']
-    best = head.sort_values('FF5 alpha (ann.)', ascending=False).iloc[0]
-    if len(sig):
-        names = ', '.join(sig['Screen'])
-        b.append(f'After controlling for market, size, value, profitability, investment and momentum, '
-                 f'{len(sig)} of {len(head)} screens show statistically significant alpha (p&lt;0.05): {html.escape(names)}. '
-                 f'The strongest is {html.escape(best["Screen"])} at {pct(best["FF5 alpha (ann.)"])} a year.')
-    else:
-        b.append(f'No screen has statistically significant Fama-French alpha at the 5% level. The highest point estimate is '
-                 f'{html.escape(best["Screen"])} at {pct(best["FF5 alpha (ann.)"])} a year (t = {num(best["FF5 alpha t"])}), '
-                 f'which is within noise.')
-    raw_beat = head[head['Avg 1y excess vs SPY'] > 0]
-    b.append(f'On raw averages, {len(raw_beat)} of {len(head)} screens beat SPY over the following year. Averages are pulled up '
-             f'by a few big winners: compare each histogram\'s mean and median, and the median excess column in the event-study table.')
-    iw = es[(es['signal_year'] == 'All') & (es['horizon'] == '1y')].set_index('screen')
-    gap = (iw['mean_xs_spy'] - iw['mean_xs_iwm']).mean()
-    if gap > 0.005:
-        b.append(f'Measured against small caps (IWM) instead of the S&amp;P 500, the average 1-year excess return is '
-                 f'{pct(gap)} lower, so part of the apparent edge is just small-cap exposure.')
-    elif gap < -0.005:
-        b.append(f'Measured against small caps (IWM), the average 1-year excess return is {pct(-gap)} higher than against '
-                 f'SPY, because small caps lagged large caps over most of this period; the edge is not just small-cap exposure.')
-    else:
-        b.append('Excess returns are about the same whether measured against SPY or small caps (IWM), so the edge is not '
-                 'explained by small-cap exposure alone.')
-    if len(era):
-        e = era[era['screen'] == head.iloc[0]['screen']].set_index('era')
-        parts = [f'{k}: {pct(v)}' for k, v in e['mean_xs_spy_1y'].items()]
-        b.append(f'The edge is not stable over time. Cluster buys (≥3) 1-year excess vs SPY by era: {", ".join(parts)}.')
-    mx = miss[miss['signal_year'] == 'All']['pct_missing'].max()
-    b.append(f'Confidence is limited by survivorship bias: up to {pct(mx)} of signals have no usable Yahoo price '
-             f'(mostly delisted companies, which are disproportionately failures), so these results likely '
-             f'<strong>overstate</strong> real-world returns.')
+    lo, hi = head['FF5 alpha (ann.)'].min(), head['FF5 alpha (ann.)'].max()
+    capm = alphas[(alphas['holding'] == '1y') & (alphas['model'] == 'CAPM') & alphas['screen'].isin(SCREENS)]
+    al = head.set_index('screen')['FF5 alpha (ann.)']
+    lead = ('On paper, all of this works.' if len(sig) == len(head) else
+            'On paper, some of this works.' if len(sig) else 'On paper, none of this clearly works.')
+    tighter = ('The simple ≥3-insider cluster screen does at least as well as the stricter ones; requiring 5 or 10 insiders '
+               'does not add return.' if al['cluster3'] >= max(al['cluster5'], al['cluster10']) else
+               'Requiring more insiders in a cluster raises alpha.')
+    b.append(f'<strong>{lead}</strong> {len(sig)} of {len(head)} screens earn statistically significant '
+             f'risk-adjusted returns. Fama-French 5-factor + momentum alpha in the calendar-time portfolio ranges from '
+             f'{pct(lo)} to {pct(hi)} a year (CAPM alpha {pct(capm["alpha_ann"].min())} to {pct(capm["alpha_ann"].max())}). '
+             f'{tighter}')
+    y1 = es[(es['signal_year'] == 'All') & (es['horizon'] == '1y') & es['screen'].isin(SCREENS)]
+    b.append(f'<strong>The typical trade loses to the index; a few big winners carry the average.</strong> The average 1-year '
+             f'excess return vs SPY is {pct(y1["mean_xs_spy"].min())} to {pct(y1["mean_xs_spy"].max())}, but the median is '
+             f'{pct(y1["median_xs_spy"].min())} to {pct(y1["median_xs_spy"].max())} and only {pct(y1["hit_rate_vs_spy"].min(), 0)}–'
+             f'{pct(y1["hit_rate_vs_spy"].max(), 0)} of signals beat SPY over a year. You need to hold many names to catch the outliers.')
+    era = T['robust_era']
+    e = era[era['era'].isin(['pre-2010', '2020+'])].pivot(index='screen', columns='era', values='ff5_alpha_ann').reindex(list(SCREENS))
+    t20 = era[era['era'] == '2020+'].set_index('screen')['t_ff5_alpha'].reindex(list(SCREENS))
+    weak = [SCREENS[k][0] for k, t in t20.items() if not abs(t) >= 1.96]
+    b.append(f'<strong>The edge has shrunk.</strong> FF5 alpha fell from {pct(e["pre-2010"].min())}–{pct(e["pre-2010"].max())} '
+             f'a year before 2010 to {pct(e["2020+"].min())}–{pct(e["2020+"].max())} since 2020'
+             + (f', where it is no longer statistically significant for {html.escape(", ".join(weak))}.' if weak else '.'))
+    liq = T['robust_liquidity']
+    lp = liq.pivot(index='screen', columns='liquidity', values='ff5_alpha_ann')
+    filt = [c for c in lp.columns if c != 'no filter'][0]
+    cut = 1 - (lp[filt] / lp['no filter'])
+    dl = T['robust_entry_delay']
+    d3 = dl.pivot(index='screen', columns='entry', values='mean_xs_spy_3m')
+    late = [c for c in d3.columns if c != 'next open'][0]
+    b.append(f'<strong>Much of it comes from penny stocks and speed.</strong> Requiring a share price of at least $2 at entry '
+             f'cuts alpha by {pct(cut.min(), 0)}–{pct(cut.max(), 0)}, and these are small, thinly traded stocks where daily '
+             f'rebalancing and the 0.5% cost assumption flatter real-world results. Entering two days later instead of at the '
+             f'next open costs about {pct((d3["next open"] - d3[late]).mean())} of 3-month excess return.')
+    mx = miss[miss['signal_year'] == 'All']
+    early = miss[miss['signal_year'].isin([str(y) for y in range(2006, 2012)])]
+    early_cov = 1 - (early['signals'] * early['pct_missing']).sum() / early['signals'].sum()
+    b.append(f'<strong>How confident to be: moderately, and expect less in practice.</strong> Only '
+             f'{pct(1 - mx["pct_missing"].max(), 0)}–{pct(1 - mx["pct_missing"].min(), 0)} of signals could be priced (Yahoo lacks '
+             f'most delisted companies), falling to {pct(early_cov, 0)} for 2006–2011, the years with the strongest results. '
+             f'Delisted stocks are disproportionately failures, so these numbers almost certainly <strong>overstate</strong> '
+             f'returns. Re-running Phase 3 with a source that includes delisted stocks is the single most important next step.')
     return b
 
 
@@ -434,6 +446,7 @@ def build(cfg=None):
     scrape = json.loads((DATA / 'scrape_summary.json').read_text())
     meta = json.loads((DATA / 'signals_meta.json').read_text())
     counts = pd.read_csv(DATA / 'signal_counts_by_year.csv')
+    pclean = json.loads((DATA / 'price_cleaning.json').read_text())
     es, alphas, miss, head = T['event_study'], T['factor_alphas'], T['missing_prices'], T['headline']
 
     ch = Charts()
@@ -451,7 +464,7 @@ def build(cfg=None):
     h['FF5 alpha (ann.)'] = [f'{pct(a)} {s}' for a, s in zip(h['FF5 alpha (ann.)'], h['Significant'])]
     show = h[['Screen', 'Signals', 'Priced %', 'Avg 1y return', 'Avg 1y excess vs SPY', '1y hit rate', 'Sharpe',
               'Max drawdown', 'FF5 alpha (ann.)', 'FF5 alpha t']]
-    bullets = summary_bullets(head, es, alphas, miss, T['robust_era'])
+    bullets = summary_bullets(head, es, alphas, miss, T)
     parts.append('<h2 id="summary">Summary</h2>')
     parts.append(html_table(show, {'Priced %': pct, 'Avg 1y return': pct, 'Avg 1y excess vs SPY': pct, '1y hit rate': pct,
                                    'Sharpe': num, 'Max drawdown': pct, 'FF5 alpha t': num, 'Signals': lambda v: f'{v:,}'},
@@ -575,7 +588,11 @@ def build(cfg=None):
                  f'<p><strong>Fund/trust filter:</strong> {meta["fund_companies_dropped"]:,} companies dropped '
                  f'({meta["fund_dropped_by_sic"]:,} by SIC {bt["fund_sic_range"][0]}–{bt["fund_sic_range"][1]}, '
                  f'{meta["fund_dropped_by_name"]:,} by name), removing {meta["fund_raw_signals_dropped"]:,} raw cluster signals. '
-                 f'Note SIC 6798 (REITs) falls inside this range, so REITs are excluded too.</p></div>')
+                 f'Note SIC 6798 (REITs) falls inside this range, so REITs are excluded too.</p>'
+                 f'<p><strong>Prices:</strong> Yahoo had data for {pclean["tickers_found"]:,} of {pclean["tickers_requested"]:,} '
+                 f'tickers tried (filed tickers plus the companies\' current SEC tickers). Bad prints removed: '
+                 f'{pclean["spikes_fixed"]:,} one-day V-shaped spikes (≥5× and back) in {pclean["tickers_with_spikes"]:,} tickers, '
+                 f'{pclean["zero_days_dropped"]:,} days with a zero price, {pclean["opens_fixed"]:,} implausible opens.</p></div>')
     parts.append('<h3>Purchase filings per year</h3>' + html_table(rp, {'Purchase filings': lambda v: f'{int(v):,}'}))
     c2 = counts.rename(columns={k: v[0] for k, v in SCREENS.items()}).rename(columns={'signal_year': 'Signal year'})
     parts.append('<h3>Signals per screen per year</h3>' + html_table(c2, {}))

@@ -1,0 +1,9 @@
+{
+  "fund_companies_dropped": 563,
+  "fund_raw_signals_dropped": 1401,
+  "fund_dropped_by_sic": 312,
+  "fund_dropped_by_name": 251,
+  "prices_corrected": 2414,
+  "values_excluded": 811,
+  "top_exec_filings": 87436
+}

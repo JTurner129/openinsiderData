@@ -1,0 +1,9 @@
+{
+  "zero_days_dropped": 12405,
+  "spikes_fixed": 484,
+  "opens_fixed": 1853,
+  "level_shifts_fixed": 487,
+  "tickers_with_spikes": 153,
+  "tickers_requested": 8012,
+  "tickers_found": 4156
+}

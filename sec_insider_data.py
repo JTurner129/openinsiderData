@@ -304,7 +304,7 @@ def main(config_path='config.yaml'):
         data.to_parquet(out_path, index=False)
     else:
         data.to_csv(out_path, index=False)
-    data.to_csv(out_path.with_suffix('.csv'), index=False)
+    data.to_csv(out_path.with_suffix('.csv.gz'), index=False)   # gzipped to stay under GitHub's file limit
 
     # Coverage report: every calendar month in range should have purchases.
     months = data['filing_date'].dt.to_period('M').value_counts().sort_index()

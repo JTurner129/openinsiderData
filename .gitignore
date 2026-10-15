@@ -33,10 +33,13 @@ ENV/
 
 # Project specific
 .cache/
-data/
 *.log
-*.csv
-*.parquet
+# Scraper output (openinsider_scraper.py)
+data/insider_trades.csv
+# Backtest: Yahoo price data is not redistributed (size and Yahoo's terms);
+# rebuild it with `python run_backtest.py 3`
+data/prices.*
+data/purchases_clean.parquet
 
 # Environment variables
 .env

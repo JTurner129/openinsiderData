@@ -140,7 +140,7 @@ def run(cfg=None):
         frames.append(r)
         LOG.info(f"entry delay {delay}: {len(r):,} signal rows, {r['price_found'].mean():.1%} priced")
     allr = pd.concat(frames, ignore_index=True)
-    save_table(allr.drop(columns=['accessions'], errors='ignore'), DATA / 'trade_returns_all_variants')
+    save_table(allr.drop(columns=['accessions'], errors='ignore'), DATA / 'trade_returns_all_variants', gzip_csv=True)
     base = allr[(allr['dedupe_days'] == bt['dedupe_days']) & (allr['entry_delay'] == bt['entry_delay_days'])]
     save_table(base.drop(columns=['accessions'], errors='ignore'), DATA / 'trade_returns')
     return allr

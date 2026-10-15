@@ -112,9 +112,64 @@ def download_prices(tickers, refresh_missing=False, batch=BATCH, pause=1.5):
     return missing
 
 
-def load_price(ticker):
+SPIKE = np.log(5.0)   # a one-day move of 5x or more, reversed by 5x or more the next day, is a bad print
+LEVEL = np.log(10.0)  # a one-day rise of 10x or more that persists is an unrecorded reverse split
+
+
+def clean_bad_prints(df):
+    """Remove bad prints from Yahoo data.
+
+    - Days with a zero or negative adjusted close (Yahoo rounds heavily
+      adjusted penny-stock history to 0) are dropped as "no data".
+    - A close that moves >= 5x up or down and >= 5x the opposite way the next
+      day (a V-shaped spike, e.g. $0.70 -> $0.0001 -> $0.31) is replaced by
+      the prior close.
+    - Opens more than 5x away from the same day's close are replaced by it.
+    - A one-day RISE of >= 10x that persists is treated as a reverse split
+      Yahoo did not adjust for: earlier history is rescaled so that day's
+      return is zero. Only rises are corrected, never drops, so real crashes
+      always count against the strategy (a genuine 10x one-day gain would be
+      lost, which errs on the conservative side).
+    Smaller genuine collapses or rallies are left alone."""
+    zero = int((~(df['adj_close'] > 0)).sum())
+    df = df[df['adj_close'] > 0].copy()
+    close = df['adj_close'].values.astype(float)
+    spiked = np.zeros(len(close), dtype=bool)
+    for _ in range(3):   # repeat for back-to-back bad prints
+        d = np.diff(np.log(close))
+        bad = np.zeros(len(close), dtype=bool)
+        if len(close) > 2:
+            bad[1:-1] = (np.abs(d[:-1]) >= SPIKE) & (np.abs(d[1:]) >= SPIKE) & (np.sign(d[:-1]) != np.sign(d[1:]))
+        if not bad.any():
+            break
+        spiked |= bad
+        close = np.where(bad, np.roll(close, 1), close)
+    op = df['adj_open'].values.astype(float)
+    d = np.diff(np.log(close))
+    shifts = np.flatnonzero(d >= LEVEL) + 1
+    scale = np.ones(len(close))
+    for k in shifts:
+        scale[:k] *= close[k] / close[k - 1]
+    close = close * scale
+    op = op * scale
+    if spiked.any() or len(shifts):
+        df['raw_close'] = df['raw_close'] * np.where(spiked, close / df['adj_close'].values / scale, 1.0)
+        df['adj_close'] = close
+        df['adj_open'] = op
+    with np.errstate(divide='ignore', invalid='ignore'):
+        bad_open = ~(op > 0) | (np.abs(np.log(op / close)) >= SPIKE)
+    df.loc[bad_open, 'adj_open'] = df.loc[bad_open, 'adj_close']
+    df.attrs.update(zero_days_dropped=zero, spikes_fixed=int(spiked.sum()), opens_fixed=int(bad_open.sum()),
+                    level_shifts_fixed=int(len(shifts)))
+    return df
+
+
+def load_price(ticker, clean=True):
     p = PRICE_CACHE / f'{yahoo_symbol(ticker)}.parquet'
-    return pd.read_parquet(p) if p.exists() else None
+    if not p.exists():
+        return None
+    df = pd.read_parquet(p)
+    return clean_bad_prints(df) if clean and len(df) > 2 else df
 
 
 def build_price_panel(tickers):
@@ -184,6 +239,15 @@ def run(cfg=None, refresh_missing=False):
         if b in missing:
             raise RuntimeError(f"Benchmark {b} prices unavailable")
     panel = build_price_panel(bench + tickers)
+    stats = {'zero_days_dropped': 0, 'spikes_fixed': 0, 'opens_fixed': 0, 'level_shifts_fixed': 0, 'tickers_with_spikes': 0}
+    for t in panel['ticker'].unique():
+        a = load_price(t).attrs
+        for k in ('zero_days_dropped', 'spikes_fixed', 'opens_fixed', 'level_shifts_fixed'):
+            stats[k] += a.get(k, 0)
+        stats['tickers_with_spikes'] += a.get('spikes_fixed', 0) > 0
+    stats.update(tickers_requested=len(bench + tickers), tickers_found=int(panel['ticker'].nunique()))
+    (DATA / 'price_cleaning.json').write_text(json.dumps(stats, indent=2))
+    LOG.info(f"Bad-print cleaning (applied on load): {stats}")
     panel.to_parquet(DATA / 'prices.parquet', index=False)
     panel.to_csv(DATA / 'prices.csv.gz', index=False, float_format='%.4f')
     LOG.info(f"Price panel: {panel['ticker'].nunique():,} tickers, {len(panel):,} rows; "

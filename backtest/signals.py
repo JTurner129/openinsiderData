@@ -271,7 +271,7 @@ def build_signals(cfg, dedupe_variants=None):
             'values_excluded': int((df['value_flag'] == 'value_excluded').sum()),
             'top_exec_filings': int(df['is_top_exec'].sum())}
     (DATA / 'signals_meta.json').write_text(json.dumps(meta, indent=2))
-    save_table(signals, DATA / 'signals_all_variants')
+    save_table(signals, DATA / 'signals_all_variants', gzip_csv=True)
     save_table(base.drop(columns=['accessions']), DATA / 'signals')
     save_table(counts, DATA / 'signal_counts_by_year', index=True)
     return signals, meta
