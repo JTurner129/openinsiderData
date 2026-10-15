@@ -1,5 +1,6 @@
 """Phase 3: adjusted daily prices from yfinance, cached per ticker."""
 import json
+import logging
 import re
 import time
 
@@ -49,7 +50,22 @@ def _finalize(df):
     return out.astype('float64')
 
 
-def download_prices(tickers, refresh_missing=False):
+class _YahooErrors(logging.Handler):
+    """Collects yfinance's error log lines so throttling can be told apart
+    from tickers Yahoo genuinely does not have."""
+
+    def __init__(self):
+        super().__init__(level=logging.ERROR)
+        self.lines = []
+
+    def emit(self, record):
+        self.lines.append(record.getMessage())
+
+    def throttled(self):
+        return any(re.search(r'rate.?limit|too many requests', l, re.IGNORECASE) for l in self.lines)
+
+
+def download_prices(tickers, refresh_missing=False, batch=BATCH, pause=1.5):
     PRICE_CACHE.mkdir(parents=True, exist_ok=True)
     missing_path = PRICE_CACHE / '_missing.json'
     missing = json.loads(missing_path.read_text()) if missing_path.exists() else {}
@@ -61,28 +77,38 @@ def download_prices(tickers, refresh_missing=False):
             continue
         todo.append(t)
     LOG.info(f"Prices: {len(tickers) - len(todo)} tickers cached/known-missing, {len(todo)} to download")
-    for i in range(0, len(todo), BATCH):
-        batch = todo[i:i + BATCH]
-        syms = [yahoo_symbol(t) for t in batch]
-        for attempt in range(3):
-            try:
-                raw = yf.download(syms, start=START, auto_adjust=False, actions=True, group_by='ticker',
-                                  threads=4, progress=False, timeout=30)
-                break
-            except Exception as e:   # yfinance raises assorted errors on throttling
-                LOG.warning(f"batch {i // BATCH}: {e}; retrying")
-                time.sleep(10 * (attempt + 1))
-        else:
+    errors = _YahooErrors()
+    logging.getLogger('yfinance').addHandler(errors)
+    i, backoff = 0, 30
+    while i < len(todo):
+        chunk = todo[i:i + batch]
+        syms = [yahoo_symbol(t) for t in chunk]
+        errors.lines.clear()
+        try:
+            raw = yf.download(syms, start=START, auto_adjust=False, actions=True, group_by='ticker',
+                              threads=4, progress=False, timeout=30)
+        except Exception as e:   # yfinance raises assorted errors on throttling
+            errors.lines.append(f'rate limit? {e}')
+            raw = None
+        if errors.throttled():
+            # Throttled: nothing in this batch can be trusted as "missing". Back off and retry it.
+            LOG.warning(f"Yahoo rate limit at {i}/{len(todo)}; sleeping {backoff}s")
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 600)
             continue
-        for t, s in zip(batch, syms):
+        backoff = 30
+        for t, s in zip(chunk, syms):
             df = _from_download(raw, s) if raw is not None and not raw.empty else None
             if df is None or len(df) < 2:
                 missing[t] = 'no data from Yahoo'
                 continue
+            missing.pop(t, None)
             _finalize(df).to_parquet(PRICE_CACHE / f'{s}.parquet')
         missing_path.write_text(json.dumps(missing))
-        LOG.info(f"  {min(i + BATCH, len(todo))}/{len(todo)} downloaded")
-        time.sleep(1.5)   # be polite to Yahoo
+        i += batch
+        LOG.info(f"  {min(i, len(todo))}/{len(todo)} downloaded")
+        time.sleep(pause)   # be polite to Yahoo
+    logging.getLogger('yfinance').removeHandler(errors)
     return missing
 
 
