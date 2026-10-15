@@ -35,6 +35,7 @@ LOOK = 126
 EXCLUDE_DAYS = 182
 SCREENS = ['cluster3', 'exec200k']
 TRAIN_END = pd.Timestamp('2015-12-31')
+LIQ_ADV = 100_000      # the $100K/day floor from the realistic-trading tests
 
 
 def universe(cal):
@@ -130,7 +131,7 @@ def run(cfg=None):
         logM = np.log(np.where(M > 0, M, np.nan))
 
     rows = []
-    BOOKS = ('all', 'drop50', 'pb1')
+    BOOKS = ('all', 'drop50', 'drop50liq', 'pb1')
     acc = {(b, h, side): (np.zeros(T), np.zeros(T)) for b in BOOKS for h in HOLDS for side in ('signal', 'control')}
     by_day = F.groupby(F['entry_date'].map(lambda d: int(np.searchsorted(cal, np.datetime64(d), 'left'))))
     for n, (m, g) in enumerate(by_day):
@@ -177,6 +178,7 @@ def run(cfg=None):
                     continue
                 end = m + len(rs)
                 books = ['all'] + (['drop50'] if ret6[j0] <= -0.5 else []) + \
+                    (['drop50liq'] if ret6[j0] <= -0.5 and s.get('adv20', 0) >= LIQ_ADV else []) + \
                     (['pb1'] if np.isfinite(pb[j0]) and np.exp(pb[j0]) <= 1 else [])
                 for side, r in (('signal', rs[:, None]), ('control', rc)):
                     v = np.vstack([np.ones((1, r.shape[1])), np.cumprod(1 + r, axis=0)[:-1]])
@@ -218,7 +220,8 @@ def run(cfg=None):
                 out.append(r)
     # Calendar-time long cluster signals / short their matched controls
     ct, daily = [], {}
-    names = {'all': 'All cluster signals', 'drop50': 'Clusters after a ≥50% drop', 'pb1': 'Clusters at price-to-book ≤ 1'}
+    names = {'all': 'All cluster signals', 'drop50': 'Clusters after a ≥50% drop',
+             'drop50liq': 'Clusters after a ≥50% drop, ≥$100K/day traded', 'pb1': 'Clusters at price-to-book ≤ 1'}
     from .robust import perf
     for bk in BOOKS:
         for h in HOLDS:

@@ -76,6 +76,7 @@ live:
   cluster_min_insiders: 3
   cluster_min_value: 200000
   max_prior_6m_return: -0.50     # null to list every cluster
+  min_dollar_volume: 100000      # 20-day average $ traded per day
   include_exec: false
   exec_min_value: 200000
   discretionary_only: false      # tested: makes no difference
