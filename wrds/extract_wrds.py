@@ -65,11 +65,21 @@ def columns(db, schema, table):
         return set()
 
 
+def readable(db, schema, table):
+    """True if this account may actually read the table (WRDS shows tables you cannot read)."""
+    try:
+        db.raw_sql(f'select * from {schema}.{table} limit 1')
+        return True
+    except Exception as e:
+        log(f'  {schema}.{table}: no access ({str(e).splitlines()[0][:80]})')
+        return False
+
+
 def first_table(db, candidates):
-    """First (schema, table) that exists, with its columns."""
+    """First (schema, table) that exists AND this account can read, with its columns."""
     for schema, table in candidates:
         cols = columns(db, schema, table)
-        if cols:
+        if cols and readable(db, schema, table):
             return schema, table, cols
     return None, None, set()
 
@@ -95,9 +105,18 @@ def save(df, name):
 def extract_table(db, summary, name, candidates, wanted, where='', chunk_by=None, start=None, end=None):
     schema, table, cols = first_table(db, candidates)
     if not schema:
-        log(f'{name}: not available in your subscription (tried {", ".join(s + "." + t for s, t in candidates)}); skipped')
+        log(f'{name}: not available to your account (tried {", ".join(s + "." + t for s, t in candidates)}); skipped')
         summary[name] = 'not available'
         return None
+    try:
+        return _extract(db, summary, name, schema, table, cols, wanted, where, chunk_by, start, end)
+    except Exception as e:
+        log(f'{name}: failed ({str(e).splitlines()[0][:120]}); skipped')
+        summary[name] = 'failed: ' + str(e).splitlines()[0][:80]
+        return None
+
+
+def _extract(db, summary, name, schema, table, cols, wanted, where, chunk_by, start, end):
     have, missing = pick(wanted, cols)
     log(f'{name}: {schema}.{table}, {len(have)} columns' + (f' (not present: {", ".join(missing)})' if missing else ''))
     sel = ', '.join(have)
@@ -183,8 +202,11 @@ def main():
             ciks = pd.read_csv(ciks_path)['cik'].astype(int).astype(str)
             cik_list = ','.join(f"'{c}'" for c in ciks)
             # CIK may be stored with or without leading zeros
-            g = db.raw_sql(f"select gvkey from comp.company where ltrim(cik, '0') in ({cik_list})")
-            insider_gvkeys = g['gvkey'].astype(str).tolist()
+            try:
+                g = db.raw_sql(f"select gvkey from comp.company where ltrim(cik, '0') in ({cik_list})")
+                insider_gvkeys = g['gvkey'].astype(str).tolist()
+            except Exception as e:
+                log(f'compustat_daily: CIK lookup failed ({str(e).splitlines()[0][:80]}); listed stocks only')
             log(f'compustat_daily: {len(insider_gvkeys):,} companies with insider purchases matched by CIK')
         else:
             log(f'compustat_daily: {ciks_path} not found; pulling exchange-listed stocks only')
@@ -192,15 +214,26 @@ def main():
         log(f'compustat_daily: {schema}.{table}, {len(have)} columns' + (f' (not present: {", ".join(missing)})' if missing else ''))
         gv = ','.join(f"'{x}'" for x in insider_gvkeys) or "''"
         cond = (f"tpci = '0' and curcdd = 'USD' and (exchg in {LISTED_EXCHANGES} or gvkey in ({gv}))")
-        total = 0
+        total, failed = 0, []
         for q_start in pd.date_range(args.start, args.end, freq='QS'):
+            label = f'compustat_daily_{q_start.year}q{q_start.quarter}'
+            if any((OUT / f'{label}.{ext}').exists() for ext in ('parquet', 'csv.gz')):
+                log(f'  {label}: already saved, skipping')
+                continue
             q_end = min(q_start + pd.offsets.QuarterEnd(0), pd.Timestamp(args.end))
-            df = db.raw_sql(f"select {', '.join(have)} from {schema}.{table} where datadate between "
-                            f"'{q_start.date()}' and '{q_end.date()}' and {cond}")
+            try:
+                df = db.raw_sql(f"select {', '.join(have)} from {schema}.{table} where datadate between "
+                                f"'{q_start.date()}' and '{q_end.date()}' and {cond}")
+            except Exception as e:
+                log(f'  {label}: failed ({str(e).splitlines()[0][:100]}); re-run to retry')
+                failed.append(label)
+                continue
             total += len(df)
             if len(df):
-                save(df, f'compustat_daily_{q_start.year}q{q_start.quarter}')
-        summary['compustat_daily'] = f'{schema}.{table}: {total:,} rows'
+                save(df, label)
+        if failed:
+            log(f'compustat_daily: {len(failed)} quarter(s) failed; run the script again to retry them')
+        summary['compustat_daily'] = f'{schema}.{table}: {total:,} new rows' + (f', {len(failed)} quarters failed' if failed else '')
 
     # 7. Optional: Thomson/LSEG insider filings, Form 4 table, from 1986
     if args.with_insiders:
