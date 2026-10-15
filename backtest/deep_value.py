@@ -144,8 +144,10 @@ def features(cfg, cal):
     P = P.sort_values('month_end')
     P['gvkey'] = P['gvkey'].astype(str)
     P['sec'] = P['sec'].astype(str)
+    P['month_end'] = pd.to_datetime(P['month_end']).astype('datetime64[ns]')
     q = fundamentals_q(cfg)
     q['gvkey'] = q['gvkey'].astype(str)
+    q['public'] = q['public'].astype('datetime64[ns]')
     P = pd.merge_asof(P, q.rename(columns={'public': 'f_public'}), left_on='month_end', right_on='f_public',
                       by='gvkey', direction='backward', tolerance=pd.Timedelta(days=200))
     mc = P['mcap'] / 1e6                        # Compustat items are in millions
@@ -164,6 +166,7 @@ def features(cfg, cal):
     si['datadate'] = pd.to_datetime(si['datadate'])
     si['sec'] = 'CS_' + si['gvkey'].astype(str) + '_' + si['iid'].astype(str)
     si['sec'] = si['sec'].astype(str)
+    si['datadate'] = si['datadate'].astype('datetime64[ns]')
     si = si.sort_values('datadate')[['sec', 'datadate', 'shortint']]
     P = pd.merge_asof(P.sort_values('month_end'), si, left_on='month_end', right_on='datadate', by='sec',
                       direction='backward', tolerance=pd.Timedelta(days=45))
