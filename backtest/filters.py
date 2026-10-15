@@ -201,6 +201,7 @@ def build_features(trades, cfg, market):
         acc = [a for a in str(t['accessions'] or '').split(',') if a in pur.index]
         w = pur.loc[acc] if acc else pur.iloc[0:0]
         f['max_own_increase'] = w['Owned'].max() if len(w) else np.nan
+        f['median_own_increase'] = w['Owned'].median() if len(w) else np.nan
         f['new_position'] = bool(len(w) and w['Owned'].isna().any())
         f['has_top_exec'] = bool(w['top_exec'].any()) if len(w) else False
         f['has_10pct_owner'] = bool(w['is_ten_pct_owner'].any()) if len(w) else False
@@ -420,6 +421,11 @@ def filter_definitions(F):
         ('Conviction', 'Total bought ≥ $1M', q('total_value', ge, 1e6)),
         ('Conviction', 'Ownership up ≥ 10%', q('max_own_increase', ge, 0.10)),
         ('Conviction', 'Ownership up ≥ 25%', q('max_own_increase', ge, 0.25)),
+        ('Conviction', 'Ownership up ≥ 50%', q('max_own_increase', ge, 0.50)),
+        ('Conviction', 'Ownership up ≥ 100% (doubled)', q('max_own_increase', ge, 1.00)),
+        ('Conviction', 'Ownership up < 10% (small top-ups)', q('max_own_increase', lt, 0.10)),
+        ('Conviction', 'Median insider ownership up ≥ 10%', q('median_own_increase', ge, 0.10)),
+        ('Conviction', 'Median insider ownership up ≥ 25%', q('median_own_increase', ge, 0.25)),
         ('Conviction', 'Includes a new position', lambda d: d['new_position']),
         ('Who', 'Cluster includes CEO/CFO/COB', lambda d: d['has_top_exec']),
         ('Who', 'No 10% owners', lambda d: ~d['has_10pct_owner'].astype(bool)),
