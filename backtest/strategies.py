@@ -25,6 +25,12 @@ A3  Big-drop signals hedged by shorting their 5 matched look-alikes, after an es
     < 5%: 0.5% a year; 5-10%: 3%; 10-20%: 10%; >= 20%: 25%; no data: 10%.
     Reported per trade (6-month hold) with month-clustered t-stats, all years and 2016+.
 
+A5  (added later, rules fixed before running) SPY plus the hedged big-drop book as an overlay:
+    100% SPY + k x (tradeable big-drop signals minus their matched look-alikes, the matched test's daily
+    calendar series), k = 0.5 and 1.0, minus a borrow fee of 5.4% a year on the short side (the A3
+    average of 2.7% per 6 months) while the book holds positions. Shorts are assumed to fund the longs.
+    Reported against SPY: CAGR, volatility, Sharpe, max drawdown, all years / to 2015 / 2016+.
+
 A4  Entry month: the same big-drop per-trade edge for entries from 15 November to 31 December
     (tax-loss selling season) against all other months.
 """
@@ -235,6 +241,23 @@ def hedged(cfg):
     return pd.DataFrame(rows)
 
 
+def overlay(spy, rf):
+    d = pd.read_parquet(DATA / 'matched_daily.parquet')
+    sig, ctl = d['drop50liq|6m|signal'], d['drop50liq|6m|control']
+    ls = (sig - ctl).reindex(spy.index)
+    active = ls.notna()
+    ls = ls.fillna(0.0)
+    start = ls.index[active.values][0]
+    rows, curves = [], {}
+    for k in (0.0, 0.5, 1.0):
+        p = (spy + k * (ls - active * 0.054 / 252)).loc[start:]
+        name = 'SPY only' if k == 0 else f'SPY + {k:g}x hedged big-drop book'
+        curves[name] = p
+        for lab, sl in (('full', slice(None)), ('to 2015', slice(None, '2015-12-31')), ('2016+', slice('2016-01-01', None))):
+            rows.append({'portfolio': name, 'period': lab, **perf(p.loc[sl], rf)})
+    return pd.DataFrame(rows), curves
+
+
 def run(cfg=None):
     cfg = cfg or load_config()
     from .analysis import load_factors
@@ -246,6 +269,9 @@ def run(cfg=None):
     t_rows, episodes, t_curves = timing(cal, spy, rf)
     s_rows, s_curves = sleeve(spy, rf)
     h_rows = hedged(cfg)
+    o_rows, o_curves = overlay(spy, rf)
+    o_rows.to_csv(RESULTS / 'overlay.csv', index=False)
+    s_curves.update({f'overlay|{k}': v for k, v in o_curves.items()})
     RESULTS.mkdir(parents=True, exist_ok=True)
     t_rows.to_csv(RESULTS / 'timing.csv', index=False)
     episodes.to_csv(RESULTS / 'timing_episodes.csv', index=False)
