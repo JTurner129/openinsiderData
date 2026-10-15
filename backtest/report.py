@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 from plotly.subplots import make_subplots
 
-from .common import CHARTS, DATA, RESULTS, ROOT, SCREENS, get_logger, load_config
+from .common import CHARTS, DATA, OUT_ROOT, RESULTS, ROOT, SCREENS, get_logger, load_config
 from .prices import load_price
 
 LOG = get_logger('report')
@@ -1010,7 +1010,7 @@ def build(cfg=None):
     page = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>Insider Buying Backtest</title><style>{CSS}</style>{plotly_js}</head><body><main>{"".join(parts)}</main>'
             f'<script>{TABLE_JS}{tables_js}</script></body></html>')
-    out = ROOT / 'report.html'
+    out = OUT_ROOT / 'report.html'
     out.write_text(page, encoding='utf-8')
     LOG.info(f"Wrote {out} ({out.stat().st_size / 1e6:.1f} MB); writing {len(ch.figs)} PNGs")
     ch.write_pngs()

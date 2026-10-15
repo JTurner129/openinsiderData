@@ -63,4 +63,7 @@ backtest:
   min_signals_heatmap: 10
   benchmarks: ["SPY", "IWM"]
   extra_benchmarks: ["IWC"]    # iShares Micro-Cap ETF, used in the filter / cost-robustness tests
+  price_source: compustat      # compustat (WRDS, includes delisted stocks) or yahoo
+  wrds_dir: ../insider-wrds-data   # private repository with the WRDS extract (licensed; never commit it here)
+  delisting_mode: shumway      # shumway (-30% NYSE/AMEX, -55% other), minus100 (stress test) or none
   price_mismatch_tolerance: 2.0 # Max ratio between insider trade price and market price before a ticker match is rejected

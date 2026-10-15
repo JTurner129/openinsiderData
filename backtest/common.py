@@ -9,8 +9,11 @@ import pandas as pd
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / 'data'
-RESULTS = ROOT / 'results'
+# Where data/, results/ and report.html go. Runs on licensed WRDS prices set
+# BACKTEST_OUTPUT to a folder in the private data repository.
+OUT_ROOT = Path(os.environ.get('BACKTEST_OUTPUT', ROOT)).resolve()
+DATA = OUT_ROOT / 'data'
+RESULTS = OUT_ROOT / 'results'
 CHARTS = RESULTS / 'charts'
 CACHE = ROOT / '.cache'
 

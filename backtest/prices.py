@@ -180,6 +180,15 @@ def clean_bad_prints(df):
 
 
 def load_price(ticker, clean=True):
+    if isinstance(ticker, str) and ticker.startswith('CS_'):
+        from .compustat import load_cs          # Compustat security (WRDS)
+        df = load_cs(ticker)
+        if df is None:
+            return None
+        attrs = dict(df.attrs)
+        df = clean_bad_prints(df) if clean and len(df) > 2 else df
+        df.attrs.update(attrs)
+        return df
     p = PRICE_CACHE / f'{yahoo_symbol(ticker)}.parquet'
     if not p.exists():
         return None
@@ -240,8 +249,37 @@ def alternate_tickers(signals, cfg):
     return alts
 
 
+def run_compustat(cfg):
+    """Prices from Compustat (WRDS): build the per-security cache and match signals by CIK."""
+    from . import compustat
+    compustat.build_cache(cfg)
+    bench = cfg['backtest']['benchmarks'] + cfg['backtest'].get('extra_benchmarks', [])
+    download_prices(bench, upgrade=True)                    # benchmarks stay on Yahoo
+    signals = pd.read_parquet(DATA / 'signals_all_variants.parquet')
+    ids = compustat.match_signals(signals, cfg)
+    out = signals[['screen', 'dedupe_days', 'signal_date', 'issuer_cik']].copy()
+    out['price_id'] = ids
+    out.to_parquet(DATA / 'signal_price_ids.parquet', index=False)
+    found = ids.notna()
+    LOG.info(f"Compustat match: {found.mean():.1%} of signal rows have a security trading on the signal date")
+    stats = {'zero_days_dropped': 0, 'spikes_fixed': 0, 'opens_fixed': 0, 'level_shifts_fixed': 0, 'tickers_with_spikes': 0}
+    uniq = sorted(ids.dropna().unique())
+    for t in uniq:
+        a = load_price(t).attrs
+        for k in ('zero_days_dropped', 'spikes_fixed', 'opens_fixed', 'level_shifts_fixed'):
+            stats[k] += a.get(k, 0)
+        stats['tickers_with_spikes'] += a.get('spikes_fixed', 0) > 0
+    stats.update(source='Compustat Security Daily (WRDS)', securities_matched=len(uniq),
+                 signal_rows_matched=float(found.mean()), delisting_mode=compustat.delisting_mode(cfg),
+                 tickers_requested=int(signals['issuer_cik'].nunique()), tickers_found=len(uniq))
+    (DATA / 'price_cleaning.json').write_text(json.dumps(stats, indent=2))
+    LOG.info(f"Bad-print cleaning (applied on load): {stats}")
+
+
 def run(cfg=None, refresh_missing=False):
     cfg = cfg or load_config()
+    if cfg['backtest'].get('price_source', 'yahoo') == 'compustat':
+        return run_compustat(cfg)
     signals = pd.read_parquet(DATA / 'signals_all_variants.parquet')
     tickers = sorted(signals['ticker'].dropna().unique().tolist())
     alts = alternate_tickers(signals, cfg)

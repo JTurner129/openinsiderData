@@ -137,8 +137,15 @@ def control_group(F, market, scorer, rf, factors):
     cal = market.cal
     base = F[F['screen'] == 'cluster3'].reset_index(drop=True)
     sig = base[base['ret_prior_6m'] <= DROP_LEVEL]
-    tickers = sorted(p.stem for p in PRICE_CACHE.glob('*.parquet'))
-    tickers = [t for t in tickers if t not in ('SPY', 'IWM', 'IWC')]
+    cfg = load_config()
+    if cfg['backtest'].get('price_source', 'yahoo') == 'compustat':
+        from .compustat import CS_CACHE
+        # Every Compustat common stock. The extract's exchange code is the CURRENT one, so no
+        # exchange filter here (it would drop companies that later fell to OTC, mostly failures).
+        tickers = sorted(p.stem for p in CS_CACHE.glob('CS_*.parquet'))
+    else:
+        tickers = sorted(p.stem for p in PRICE_CACHE.glob('*.parquet'))
+        tickers = [t for t in tickers if t not in ('SPY', 'IWM', 'IWC')]
     closes = {}
     for t in tickers:
         s = market.get(t)
@@ -147,7 +154,7 @@ def control_group(F, market, scorer, rf, factors):
     LOG.info(f"control: {len(closes):,} tickers in the price universe")
     # Tickers with any cluster-buy signal: excluded within +/- 6 months of it
     cl = F[F['screen'] == 'cluster3'][['price_ticker', 'signal_date']].dropna()
-    cl['price_ticker'] = cl['price_ticker'].map(yahoo_symbol)
+    cl['price_ticker'] = cl['price_ticker'].map(lambda t: t if str(t).startswith('CS_') else yahoo_symbol(t))
     near = {t: g['signal_date'].values for t, g in cl.groupby('price_ticker')}
     rows = []
     for _, t in sig.iterrows():

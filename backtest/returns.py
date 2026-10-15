@@ -133,10 +133,24 @@ def run(cfg=None):
     cfg = cfg or load_config()
     bt = cfg['backtest']
     signals = pd.read_parquet(DATA / 'signals_all_variants.parquet')
+    compustat = bt.get('price_source', 'yahoo') == 'compustat'
+    if compustat:
+        # Price each signal by its Compustat security (matched by CIK), keeping the filed ticker for display
+        ids = pd.read_parquet(DATA / 'signal_price_ids.parquet')
+        signals = signals.merge(ids, on=['screen', 'dedupe_days', 'signal_date', 'issuer_cik'], how='left')
+        signals['filed_ticker'] = signals['ticker']
+        signals['ticker'] = signals['price_id']
     frames = []
     for delay in bt['entry_delay_variants']:
         sub = signals if delay == bt['entry_delay_days'] else signals[signals['dedupe_days'] == bt['dedupe_days']]
-        r = compute_with_fallback(sub, cfg, delay)
+        if compustat:
+            r = compute_returns(sub, cfg, delay)
+            r['price_ticker'] = r['ticker'].where(r['price_found'])
+            r['ticker_source'] = np.where(r['price_found'], 'compustat', None)
+            r['ticker'] = r['filed_ticker']
+            r['price_status'] = r['price_status'].replace({'no_ticker': 'not_in_compustat'})
+        else:
+            r = compute_with_fallback(sub, cfg, delay)
         frames.append(r)
         LOG.info(f"entry delay {delay}: {len(r):,} signal rows, {r['price_found'].mean():.1%} priced")
     allr = pd.concat(frames, ignore_index=True)

@@ -189,10 +189,17 @@ def build_features(trades, cfg, market):
     pur = purchases.set_index('accession_number').join(hist)
     pur['top_exec'] = pur['Title'].map(is_top_exec)
     info = json.loads((CACHE / 'sec_company_info.json').read_text())
-    shares = fetch_shares_frames(cfg)
-    shares_by_cik = {c: g for c, g in shares.groupby('cik')}
-    book = fetch_book_frames(cfg)
-    book_by_cik = {c: g for c, g in book.groupby('cik')}
+    use_cs = cfg['backtest'].get('price_source', 'yahoo') == 'compustat'
+    if use_cs:
+        # Compustat: daily shares outstanding (all years) and quarterly book equity by report date
+        from .compustat import fundamentals
+        cs_book = {g: x for g, x in fundamentals(cfg).groupby('gvkey')}
+        shares_by_cik, book_by_cik = {}, {}
+    else:
+        shares = fetch_shares_frames(cfg)
+        shares_by_cik = {c: g for c, g in shares.groupby('cik')}
+        book = fetch_book_frames(cfg)
+        book_by_cik = {c: g for c, g in book.groupby('cik')}
     cal = market.cal
 
     feats = []
@@ -225,6 +232,17 @@ def build_features(trades, cfg, market):
             yr = yr[np.isfinite(yr)]
             f['pct_above_52w_low'] = prev / yr.min() - 1 if len(yr) > 100 else np.nan
             f['pct_below_52w_high'] = 1 - prev / yr.max() if len(yr) > 100 else np.nan
+            if use_cs and str(t['price_ticker']).startswith('CS_'):
+                gvkey = str(t['price_ticker']).split('_')[1]
+                px = load_price(t['price_ticker'])
+                so = px['shares_out'].loc[:t['entry_date']].dropna() if px is not None and 'shares_out' in px else None
+                if so is not None and len(so):
+                    f['market_cap'] = so.iloc[-1] * t['entry_price_raw']
+                b = cs_book.get(gvkey)
+                if b is not None:
+                    b = b[b['public'] <= t['signal_date']]
+                    if len(b) and (t['signal_date'] - b['public'].iloc[-1]).days <= 500:
+                        f['book_equity'] = b['book_equity'].iloc[-1]
             g = shares_by_cik.get(int(t['issuer_cik']))
             if g is not None:
                 g = g[g['end'] <= t['signal_date']]

@@ -138,21 +138,8 @@ def _extract(db, summary, name, schema, table, cols, wanted, where, chunk_by, st
     return schema, table
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--start', default='2005-01-01')
-    ap.add_argument('--end', default=pd.Timestamp.today().strftime('%Y-%m-%d'))
-    ap.add_argument('--with-insiders', action='store_true', help='also pull Thomson/LSEG insider filings (large)')
-    ap.add_argument('--insiders-start', default='1986-01-01')
-    ap.add_argument('--ciks', default=str(Path(__file__).with_name('insider_ciks.csv')),
-                    help='CSV of insider-purchase company CIKs (from the repo); their OTC prices are included')
-    args = ap.parse_args()
-
-    import wrds
-    db = wrds.Connection()
-    summary = {}
-    log(f'Writing to {OUT}')
-
+def metadata(db, summary, args):
+    """CRSP (if accessible), link, company, fundamentals and security tables."""
     # 1. CRSP security info (which permnos are US common stocks, ticker history)
     sec = extract_table(db, summary, 'crsp_security_info',
                         [('crsp', 'stksecurityinfohist'), ('crsp_a_stock', 'stksecurityinfohist')], CIZ_SECINFO)
@@ -191,6 +178,29 @@ def main():
     #    exchange (including OTC) for companies with insider purchases.
     #    Quarterly files keep each under GitHub's 100 MB limit.
     extract_table(db, summary, 'compustat_security', [('comp', 'security'), ('comp_na_daily_all', 'security')], SECURITY)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--start', default='2005-01-01')
+    ap.add_argument('--end', default=pd.Timestamp.today().strftime('%Y-%m-%d'))
+    ap.add_argument('--with-insiders', action='store_true', help='also pull Thomson/LSEG insider filings (large)')
+    ap.add_argument('--insiders-start', default='1986-01-01')
+    ap.add_argument('--all-us', action='store_true',
+                    help='daily prices for ALL US common stocks regardless of exchange (for comparison groups)')
+    ap.add_argument('--ciks', default=str(Path(__file__).with_name('insider_ciks.csv')),
+                    help='CSV of insider-purchase company CIKs (from the repo); their OTC prices are included')
+    args = ap.parse_args()
+
+    import wrds
+    db = wrds.Connection()
+    summary = {}
+    log(f'Writing to {OUT}')
+
+    if args.all_us:
+        log('--all-us: daily prices only (metadata already extracted)')
+    else:
+        metadata(db, summary, args)
     schema, table, cols = first_table(db, [('comp', 'secd'), ('comp_na_daily_all', 'secd')])
     if not schema:
         log('compustat_daily: Security Daily (comp.secd) is not in your subscription; prices cannot come from WRDS')
@@ -214,9 +224,15 @@ def main():
         log(f'compustat_daily: {schema}.{table}, {len(have)} columns' + (f' (not present: {", ".join(missing)})' if missing else ''))
         gv = ','.join(f"'{x}'" for x in insider_gvkeys) or "''"
         cond = (f"tpci = '0' and curcdd = 'USD' and (exchg in {LISTED_EXCHANGES} or gvkey in ({gv}))")
+        prefix = 'compustat_daily'
+        if args.all_us:
+            # Compustat's exchg is the CURRENT exchange, so an exchange filter drops companies that later
+            # fell to OTC (mostly failures). Pull every US-dollar common stock of a US company instead.
+            cond = "tpci = '0' and curcdd = 'USD' and gvkey in (select gvkey from comp.company where fic = 'USA')"
+            prefix = 'compustat_daily_all'
         total, failed = 0, []
         for q_start in pd.date_range(args.start, args.end, freq='QS'):
-            label = f'compustat_daily_{q_start.year}q{q_start.quarter}'
+            label = f'{prefix}_{q_start.year}q{q_start.quarter}'
             if any((OUT / f'{label}.{ext}').exists() for ext in ('parquet', 'csv.gz')):
                 log(f'  {label}: already saved, skipping')
                 continue
