@@ -167,6 +167,26 @@ def signals(store, rules):
     return pd.DataFrame(rows)
 
 
+def add_prior_return(sig, lookback_days=182):
+    """Prior ~6-month price change for each signal's ticker (Yahoo Finance via yfinance, if installed)."""
+    try:
+        import yfinance as yf
+    except ImportError:
+        print('yfinance not installed: pip install yfinance (needed for the crash filter)')
+        sig['ret_prior_6m'] = np.nan
+        return sig
+    out = []
+    for t in sig['ticker']:
+        try:
+            h = yf.Ticker(str(t).replace('.', '-')).history(period='1y', auto_adjust=True)['Close'].dropna()
+            h = h[h.index >= h.index[-1] - pd.Timedelta(days=lookback_days)]
+            out.append(h.iloc[-1] / h.iloc[0] - 1 if len(h) > 20 else np.nan)
+        except Exception:
+            out.append(np.nan)
+    sig['ret_prior_6m'] = out
+    return sig
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--days', type=int, default=5)
@@ -175,6 +195,12 @@ def main():
     rules = cfg['live']
     store = scan(cfg, args.days)
     sig = signals(store, rules)
+    if not sig.empty and rules.get('max_prior_6m_return') is not None:
+        sig = add_prior_return(sig)
+        miss = sig['ret_prior_6m'].isna()
+        if miss.any():
+            print('Could not price (check by hand): ' + ', '.join(sig.loc[miss, 'ticker'].astype(str)))
+        sig = sig[sig['ret_prior_6m'] <= rules['max_prior_6m_return']]
     if sig.empty:
         print('No signals.')
         return
@@ -190,7 +216,9 @@ def main():
     if len(fresh):
         pd.concat([log, fresh.astype(str)], ignore_index=True).to_csv(LOG_CSV, index=False)
         print(f'{len(fresh)} NEW signal(s) — buy at the next open:')
-        print(fresh[['screen', 'ticker', 'company', 'insiders', 'total_value', 'insider_sales_90d']].to_string(index=False))
+        cols = ['screen', 'ticker', 'company', 'insiders', 'total_value'] + \
+            (['ret_prior_6m'] if 'ret_prior_6m' in fresh else []) + ['insider_sales_90d']
+        print(fresh[cols].to_string(index=False))
     else:
         print('No new signals (all already logged).')
 

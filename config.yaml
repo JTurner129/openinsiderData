@@ -70,11 +70,15 @@ backtest:
 
 # Daily paper-trading scanner (live_signals.py). Set to the recommended method once the backtest is final.
 live:
+  # Recommended rule from the Compustat backtest: clusters of >= 3 insiders buying >= $200K within
+  # 30 days, in a stock down >= 50% over the prior ~6 months. Buy at the next open, hold 126 trading days (~6 months).
   cluster_window_days: 30
   cluster_min_insiders: 3
   cluster_min_value: 200000
+  max_prior_6m_return: -0.50     # null to list every cluster
   include_exec: false
   exec_min_value: 200000
-  discretionary_only: false
-  exclude_insider_selling: false
+  discretionary_only: false      # tested: makes no difference
+  exclude_insider_selling: false # tested: makes no difference
   dedupe_days: 90
+  hold_trading_days: 126
