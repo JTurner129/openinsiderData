@@ -47,3 +47,7 @@ data/purchases_clean.parquet
 # OS specific
 .DS_Store
 Thumbs.db
+
+# WRDS data is licensed: never commit it to this public repository
+insider_wrds/
+wrds_data/
