@@ -1,16 +1,17 @@
 # Basic Settings
 output:
   directory: "data"
-  filename: "insider_trades.csv"
-  format: "csv"  # Possible values: csv, parquet
+  filename: "insider_trades.parquet"
+  format: "parquet"  # Possible values: csv, parquet
 
 # Scraping Settings
 scraping:
   start_year: 2003  # From which year should data be retrieved
   start_month: 1    # From which month in start_year
-  max_workers: 10   # Number of parallel downloads
+  max_workers: 3    # Number of parallel downloads (kept low to be polite)
   retry_attempts: 3 # Number of retry attempts on errors
-  timeout: 30       # Timeout in seconds for HTTP requests
+  timeout: 60       # Timeout in seconds for HTTP requests
+  request_delay: 1.0 # Seconds to wait between requests per worker
 
 # Filter Settings
 filters:
@@ -31,4 +32,34 @@ logging:
 cache:
   enabled: true              # Enable/disable cache
   directory: ".cache"        # Cache directory
-  max_age: 720              # Maximum age of cache files in hours
+  max_age: 720              # Maximum age of cache files in hours (closed quarters never expire)
+
+# SEC EDGAR source (used by sec_insider_data.py and the backtest).
+# OpenInsider builds its tables from these same SEC Form 4 filings.
+sec:
+  # SEC requires a descriptive User-Agent with a contact address.
+  # Replace with your own contact; can also be set via the SEC_USER_AGENT env var.
+  user_agent: "insider-backtest research contact@example.org"
+  datasets_page: "https://www.sec.gov/data-research/sec-markets-data/insider-transactions-data-sets"
+  form_types: ["4"]            # Original Form 4 filings only (amendments 4/A would double count)
+  max_requests_per_second: 5   # SEC allows 10; stay well below
+
+# Backtest settings (backtest/ package)
+backtest:
+  cluster_window_days: 30      # Rolling filing-date window for cluster buys
+  cluster_min_value: 200000    # Total $ bought in the window
+  cluster_min_insiders: [3, 5, 10]
+  exec_min_values: [200000, 500000]
+  dedupe_days: 90              # Ignore repeat signals from the same company on the same screen
+  dedupe_variants: [0, 30, 90, 180]
+  entry_delay_days: 1          # 1 = next trading day's open after the filing date
+  entry_delay_variants: [1, 2]
+  horizons: {"1w": 5, "1m": 21, "3m": 63, "6m": 126, "1y": 252}
+  holding_periods: {"1m": 21, "3m": 63, "6m": 126, "1y": 252}
+  round_trip_cost: 0.005
+  min_entry_price: 0           # Liquidity filter; set to 2 to require price >= $2 at entry
+  min_entry_price_variant: 2   # Shown in the robustness section
+  fund_sic_range: [6720, 6799]
+  min_signals_heatmap: 10
+  benchmarks: ["SPY", "IWM"]
+  price_mismatch_tolerance: 2.0 # Max ratio between insider trade price and market price before a ticker match is rejected
