@@ -1,6 +1,7 @@
 """Build report.html (interactive Plotly), PNG charts and results.xlsx."""
 import html
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from plotly.subplots import make_subplots
 from .common import CHARTS, DATA, RESULTS, ROOT, SCREENS, get_logger, load_config
 
 LOG = get_logger('report')
+for _n in ('kaleido', 'choreographer'):
+    logging.getLogger(_n).setLevel(logging.WARNING)
 
 # Reference categorical palette (fixed order) and chart chrome.
 SERIES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948']
@@ -67,40 +70,57 @@ class Charts:
 def heatmap(es, screen, min_n):
     d = es[(es['screen'] == screen) & (es['signal_year'] != 'All')]
     years = sorted(d['signal_year'].unique())
-    z, text, custom = [], [], []
+    z, grey, custom, notes = [], [], [], []
     for y in years:
-        row, trow, crow = [], [], []
+        row, grow, crow = [], [], []
         for h in HORIZONS:
             c = d[(d['signal_year'] == y) & (d['horizon'] == h)]
             n = int(c['count'].iloc[0]) if len(c) and pd.notna(c['count'].iloc[0]) else 0
             v = c['mean_xs_spy'].iloc[0] if n else np.nan
-            row.append(v * 100 if n >= min_n and pd.notna(v) else np.nan)
-            trow.append(f'{v * 100:.1f}%<br><span style="font-size:10px">n={n}</span>' if n and pd.notna(v) else '')
-            crow.append([n, '' if n >= min_n else ' (fewer than %d signals: greyed out)' % min_n])
+            ok = n >= min_n and pd.notna(v)
+            row.append(v * 100 if ok else np.nan)
+            grow.append(0 if (n and not ok) else np.nan)
+            crow.append([n, '' if ok else f' (fewer than {min_n} signals: greyed out)', v * 100 if n else np.nan])
+            if n:
+                notes.append((HORIZONS.index(h), years.index(y), v * 100, n, ok))
         z.append(row)
-        text.append(trow)
+        grey.append(grow)
         custom.append(crow)
-    zmax = np.nanpercentile(np.abs(np.array(z, dtype=float)), 95) if np.isfinite(np.array(z, dtype=float)).any() else 10
-    zmax = max(zmax, 1)
-    grey = [[np.nan if (cell[0] >= min_n or cell[0] == 0) else 0 for cell in r] for r in custom]
+    arr = np.array(z, dtype=float)
+    zmax = max(np.nanpercentile(np.abs(arr), 95), 1) if np.isfinite(arr).any() else 10
     fig = go.Figure()
-    fig.add_trace(go.Heatmap(z=grey, x=HORIZONS, y=years, colorscale=[[0, '#d6d5cf'], [1, '#d6d5cf']],
-                             showscale=False, hoverinfo='skip', xgap=2, ygap=2))
+    xi, yi = list(range(len(HORIZONS))), list(range(len(years)))
+    yl = [[y] * len(HORIZONS) for y in years]
+    xl = [HORIZONS] * len(years)
+    custom = [[c + [yy, xx] for c, yy, xx in zip(cr, yr, xr)] for cr, yr, xr in zip(custom, yl, xl)]
+    fig.add_trace(go.Heatmap(z=grey, x=xi, y=yi, colorscale=[[0, '#d6d5cf'], [1, '#d6d5cf']], showscale=False,
+                             customdata=custom, xgap=2, ygap=2,
+                             hovertemplate='Signal year %{customdata[3]}, horizon %{customdata[4]}<br>Mean excess vs SPY: %{customdata[2]:.1f}%'
+                                           '<br>Signals: %{customdata[0]}%{customdata[1]}<extra></extra>'))
     fig.add_trace(go.Heatmap(
-        z=z, x=HORIZONS, y=years, text=text, texttemplate='%{text}', textfont=dict(size=11, color=INK),
-        colorscale=[[0, NEG], [0.5, MID], [1, POS]], zmin=-zmax, zmax=zmax, zmid=0, xgap=2, ygap=2,
-        customdata=custom, colorbar=dict(title='Excess vs SPY', ticksuffix='%'),
-        hovertemplate='Signal year %{y}, horizon %{x}<br>Mean excess vs SPY: %{z:.1f}%<br>Signals: %{customdata[0]}%{customdata[1]}<extra></extra>'))
-    # Show the text for greyed cells too
-    fig.add_trace(go.Heatmap(z=[[0 if t and np.isnan(zz) else np.nan for t, zz in zip(tr, zr)] for tr, zr in zip(text, z)],
-                             x=HORIZONS, y=years, text=text, texttemplate='%{text}', textfont=dict(size=11, color=INK2),
-                             colorscale=[[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0)']], showscale=False, hoverinfo='skip'))
+        z=z, x=xi, y=yi, colorscale=[[0, NEG], [0.5, MID], [1, POS]], zmin=-zmax, zmax=zmax, zmid=0,
+        xgap=2, ygap=2, customdata=custom, colorbar=dict(title='Excess vs SPY', ticksuffix='%'),
+        hovertemplate='Signal year %{customdata[3]}, horizon %{customdata[4]}<br>Mean excess vs SPY: %{z:.1f}%<br>Signals: %{customdata[0]}<extra></extra>'))
+    for h, y, v, n, ok in notes:
+        strong = ok and abs(v) / zmax > 0.55
+        fig.add_annotation(x=h, y=y, text=f'{v:.1f}%  <span style="font-size:10px">n={n}</span>', showarrow=False,
+                           font=dict(size=11, color='white' if strong else (INK if ok else MUTED)))
     base_layout(fig, f'{SCREENS[screen][0]}: mean excess return vs SPY by signal year', 'Horizon after entry',
-                'Signal year', height=max(380, 26 * len(years) + 140))
+                'Signal year', height=max(380, 24 * len(years) + 140))
     fig.update_layout(hovermode='closest')
-    fig.update_yaxes(type='category', autorange='reversed', gridcolor='rgba(0,0,0,0)')
-    fig.update_xaxes(gridcolor='rgba(0,0,0,0)')
+    fig.update_yaxes(tickvals=yi, ticktext=years, autorange='reversed', gridcolor='rgba(0,0,0,0)', zeroline=False)
+    fig.update_xaxes(tickvals=xi, ticktext=HORIZONS, gridcolor='rgba(0,0,0,0)', side='top', zeroline=False,
+                     title='Horizon after entry')
+    fig.update_layout(margin=dict(t=110))
     return fig
+
+
+def log_ticks(fig, values, **kw):
+    """Readable dollar ticks on a log axis (1-2-5 sequence)."""
+    lo, hi = max(min(values), 1), max(values)
+    ticks = [m * 10 ** e for e in range(2, 9) for m in (1, 2, 5) if lo / 1.5 <= m * 10 ** e <= hi * 1.5]
+    fig.update_yaxes(type='log', tickvals=ticks, ticktext=[f'${t / 1000:,.0f}K' if t < 1e6 else f'${t / 1e6:,.1f}M'
+                                                          for t in ticks], **kw)
 
 
 def horizon_bars(es, screen):
@@ -124,11 +144,13 @@ def equity_drawdown(daily, screen, hold='1y'):
     col = f'{screen}|{hold}'
     r = daily[col].dropna()
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.68, 0.32], vertical_spacing=0.06)
+    vals = []
     for name, series, style in [(SCREENS[screen][0], r, dict(color=SCREEN_COLOR[screen])),
                                 ('SPY', daily['SPY'].reindex(r.index).fillna(0), BENCH_STYLE['SPY']),
                                 ('IWM', daily['IWM'].reindex(r.index).fillna(0), BENCH_STYLE['IWM'])]:
         w = 10_000 * (1 + series).cumprod()
         dd = w / w.cummax() - 1
+        vals += [w.min(), w.max()]
         fig.add_trace(go.Scatter(x=w.index, y=w, name=name, line=dict(width=2, **style), legendgroup=name,
                                  hovertemplate=name + ': $%{y:,.0f}<extra></extra>'), row=1, col=1)
         fig.add_trace(go.Scatter(x=dd.index, y=dd * 100, name=name, line=dict(width=1.5, **style), legendgroup=name,
@@ -136,7 +158,7 @@ def equity_drawdown(daily, screen, hold='1y'):
                       row=2, col=1)
     base_layout(fig, f'{SCREENS[screen][0]}: growth of $10,000 (calendar-time portfolio, 1-year hold) and drawdown',
                 height=560)
-    fig.update_yaxes(type='log', title='Portfolio value ($, log scale)', tickprefix='$', row=1, col=1)
+    log_ticks(fig, vals, title='Portfolio value (log scale)', row=1, col=1)
     fig.update_yaxes(title='Drawdown (%)', ticksuffix='%', row=2, col=1)
     fig.update_xaxes(title='Date', row=2, col=1)
     return fig
@@ -163,20 +185,23 @@ def histogram(trades, screen):
 
 def all_equity(daily, hold='1y'):
     fig = go.Figure()
+    vals = []
     start = min(daily[f'{s}|{hold}'].first_valid_index() for s in SCREENS if f'{s}|{hold}' in daily)
     for s in SCREENS:
         r = daily[f'{s}|{hold}'].dropna()
         w = 10_000 * (1 + r).cumprod()
+        vals += [w.min(), w.max()]
         fig.add_trace(go.Scatter(x=w.index, y=w, name=SCREENS[s][0], line=dict(width=2, color=SCREEN_COLOR[s]),
                                  hovertemplate=SCREENS[s][0] + ': $%{y:,.0f}<extra></extra>'))
     for b in ['SPY', 'IWM']:
         r = daily[b].loc[start:].fillna(0)
         w = 10_000 * (1 + r).cumprod()
+        vals += [w.min(), w.max()]
         fig.add_trace(go.Scatter(x=w.index, y=w, name=b, line=dict(width=2, **BENCH_STYLE[b]),
                                  hovertemplate=b + ': $%{y:,.0f}<extra></extra>'))
     base_layout(fig, 'All screens: growth of $10,000 (calendar-time portfolios, 1-year hold)', 'Date',
-                'Portfolio value ($, log scale)', height=520)
-    fig.update_yaxes(type='log', tickprefix='$')
+                'Portfolio value (log scale)', height=520)
+    log_ticks(fig, vals)
     return fig
 
 
@@ -287,8 +312,15 @@ def summary_bullets(head, es, alphas, miss, era):
              f'by a few big winners: compare each histogram\'s mean and median, and the median excess column in the event-study table.')
     iw = es[(es['signal_year'] == 'All') & (es['horizon'] == '1y')].set_index('screen')
     gap = (iw['mean_xs_spy'] - iw['mean_xs_iwm']).mean()
-    b.append(f'Measured against small caps (IWM) instead of the S&amp;P 500, the 1-year excess return shrinks by about '
-             f'{pct(gap)} on average, because these signals lean toward smaller companies.')
+    if gap > 0.005:
+        b.append(f'Measured against small caps (IWM) instead of the S&amp;P 500, the average 1-year excess return is '
+                 f'{pct(gap)} lower, so part of the apparent edge is just small-cap exposure.')
+    elif gap < -0.005:
+        b.append(f'Measured against small caps (IWM), the average 1-year excess return is {pct(-gap)} higher than against '
+                 f'SPY, because small caps lagged large caps over most of this period; the edge is not just small-cap exposure.')
+    else:
+        b.append('Excess returns are about the same whether measured against SPY or small caps (IWM), so the edge is not '
+                 'explained by small-cap exposure alone.')
     if len(era):
         e = era[era['screen'] == head.iloc[0]['screen']].set_index('era')
         parts = [f'{k}: {pct(v)}' for k, v in e['mean_xs_spy_1y'].items()]
@@ -558,7 +590,8 @@ def build(cfg=None):
 
     parts.append('<h2 id="method">Method and assumptions</h2><div class="card">' + METHOD.format(**bt) + '</div>')
 
-    plotly_js = pio.to_html(go.Figure(), include_plotlyjs=True, full_html=False).split('<div')[0]
+    from plotly.offline import get_plotlyjs
+    plotly_js = f'<script type="text/javascript">{get_plotlyjs()}</script>'
     tables_js = ''.join(f'makeTable("tbl_{s}",{json.dumps(signal_table_json(trades, s))});' for s in SCREENS)
     page = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>Insider Buying Backtest</title><style>{CSS}</style>{plotly_js}</head><body><main>{"".join(parts)}</main>'

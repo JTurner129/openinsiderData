@@ -79,10 +79,11 @@ def fetch_company_info(ciks, cfg):
 def fund_exclusion_reason(name, sec_name, sic, sic_range):
     if sic is not None and sic_range[0] <= sic <= sic_range[1]:
         return f'SIC {sic}'
+    # Only the name on the filings counts: the SEC's current name can reflect a
+    # later change (e.g. an operating company that became a liquidating trust).
     bank = sic is not None and sic in BANK_SIC
-    for n in (name, sec_name):
-        if isinstance(n, str) and FUND_NAME_RE.search(n) and not bank:
-            return 'name'
+    if isinstance(name, str) and FUND_NAME_RE.search(name) and not bank:
+        return 'name'
     return None
 
 

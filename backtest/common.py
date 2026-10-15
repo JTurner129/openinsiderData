@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -50,5 +51,11 @@ def save_table(df, path_stem, index=False):
     out.columns = [str(c) for c in out.columns]
     for c in out.columns:
         if out[c].dtype == object:
-            out[c] = out[c].astype('string')
+            vals = out[c].dropna()
+            if len(vals) and vals.map(lambda v: isinstance(v, (bool, np.bool_))).all():
+                out[c] = out[c].astype('boolean')
+            elif len(vals) and vals.map(lambda v: isinstance(v, (int, float, np.number))).all():
+                out[c] = pd.to_numeric(out[c])
+            else:
+                out[c] = out[c].astype('string')
     out.to_parquet(path_stem.with_suffix('.parquet'), index=False)
