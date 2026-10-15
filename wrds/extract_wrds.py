@@ -1,5 +1,9 @@
 """Extract the data the insider-buying backtest needs from WRDS.
 
+Works with CRSP if you have it, or with Compustat alone: Compustat Security
+Daily (comp.secd) keeps delisted companies, and comp.company carries the SEC
+CIK, so prices can be matched to insider filings without CRSP.
+
 Run this ON WRDS (JupyterHub at https://wrds-jupyter.wharton.upenn.edu, or the
 WRDS Cloud), where `import wrds` connects without a password:
 
@@ -39,6 +43,10 @@ LEGACY_DELIST = ['permno', 'dlstdt', 'dlret', 'dlretx', 'dlstcd']
 CCM = ['gvkey', 'lpermno', 'lpermco', 'linktype', 'linkprim', 'linkdt', 'linkenddt']
 COMPANY = ['gvkey', 'cik', 'conm', 'sic', 'naics', 'loc', 'ipodate', 'dldte', 'dlrsn']
 FUNDQ = ['gvkey', 'datadate', 'rdq', 'fyearq', 'fqtr', 'ceqq', 'seqq', 'cshoq', 'atq', 'ltq', 'prccq', 'niq', 'saleq']
+SECD = ['gvkey', 'iid', 'datadate', 'prccd', 'prcod', 'prchd', 'prcld', 'cshtrd', 'cshoc', 'ajexdi', 'trfd',
+        'curcdd', 'exchg', 'tpci', 'prcstd']
+SECURITY = ['gvkey', 'iid', 'tic', 'cusip', 'exchg', 'excntry', 'tpci', 'dldtei', 'dlrsni', 'secstat', 'ibtic']
+LISTED_EXCHANGES = (11, 12, 14)      # NYSE, NYSE American (AMEX), Nasdaq
 INSIDERS = ['personid', 'owner', 'rolecode1', 'rolecode2', 'rolecode3', 'rolecode4', 'cusip6', 'cusip2', 'ticker',
             'cname', 'trandate', 'fdate', 'acqdisp', 'trancode', 'shares', 'tprice', 'ownership', 'sharesheld',
             'cleanse', 'seqnum', 'sectitle', 'formtype', 'secid', 'dcn', 'amend']
@@ -117,6 +125,8 @@ def main():
     ap.add_argument('--end', default=pd.Timestamp.today().strftime('%Y-%m-%d'))
     ap.add_argument('--with-insiders', action='store_true', help='also pull Thomson/LSEG insider filings (large)')
     ap.add_argument('--insiders-start', default='1986-01-01')
+    ap.add_argument('--ciks', default=str(Path(__file__).with_name('insider_ciks.csv')),
+                    help='CSV of insider-purchase company CIKs (from the repo); their OTC prices are included')
     args = ap.parse_args()
 
     import wrds
@@ -158,7 +168,41 @@ def main():
                   where="indfmt = 'INDL' and datafmt = 'STD' and popsrc = 'D' and consol = 'C' "
                         "and datadate >= '2003-01-01'")
 
-    # 6. Optional: Thomson/LSEG insider filings, Form 4 table, from 1986
+    # 6. Compustat Security Daily: prices for listed US common stocks, plus any
+    #    exchange (including OTC) for companies with insider purchases.
+    #    Quarterly files keep each under GitHub's 100 MB limit.
+    extract_table(db, summary, 'compustat_security', [('comp', 'security'), ('comp_na_daily_all', 'security')], SECURITY)
+    schema, table, cols = first_table(db, [('comp', 'secd'), ('comp_na_daily_all', 'secd')])
+    if not schema:
+        log('compustat_daily: Security Daily (comp.secd) is not in your subscription; prices cannot come from WRDS')
+        summary['compustat_daily'] = 'not available'
+    else:
+        ciks_path = Path(args.ciks)
+        insider_gvkeys = []
+        if ciks_path.exists():
+            ciks = pd.read_csv(ciks_path)['cik'].astype(int).astype(str)
+            cik_list = ','.join(f"'{c}'" for c in ciks)
+            # CIK may be stored with or without leading zeros
+            g = db.raw_sql(f"select gvkey from comp.company where ltrim(cik, '0') in ({cik_list})")
+            insider_gvkeys = g['gvkey'].astype(str).tolist()
+            log(f'compustat_daily: {len(insider_gvkeys):,} companies with insider purchases matched by CIK')
+        else:
+            log(f'compustat_daily: {ciks_path} not found; pulling exchange-listed stocks only')
+        have, missing = pick(SECD, cols)
+        log(f'compustat_daily: {schema}.{table}, {len(have)} columns' + (f' (not present: {", ".join(missing)})' if missing else ''))
+        gv = ','.join(f"'{x}'" for x in insider_gvkeys) or "''"
+        cond = (f"tpci = '0' and curcdd = 'USD' and (exchg in {LISTED_EXCHANGES} or gvkey in ({gv}))")
+        total = 0
+        for q_start in pd.date_range(args.start, args.end, freq='QS'):
+            q_end = min(q_start + pd.offsets.QuarterEnd(0), pd.Timestamp(args.end))
+            df = db.raw_sql(f"select {', '.join(have)} from {schema}.{table} where datadate between "
+                            f"'{q_start.date()}' and '{q_end.date()}' and {cond}")
+            total += len(df)
+            if len(df):
+                save(df, f'compustat_daily_{q_start.year}q{q_start.quarter}')
+        summary['compustat_daily'] = f'{schema}.{table}: {total:,} rows'
+
+    # 7. Optional: Thomson/LSEG insider filings, Form 4 table, from 1986
     if args.with_insiders:
         extract_table(db, summary, 'tfn_insiders', [('tfn', 'table1'), ('tr_insiders', 'table1')], INSIDERS,
                       chunk_by='fdate', start=args.insiders_start, end=args.end)
