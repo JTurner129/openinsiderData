@@ -31,6 +31,13 @@ clustered by entry month; calendar-time FF5+UMD alpha of the long-only portfolio
 A filter "helps" if it beats the unfiltered sample in both periods.
 
 Exploratory: F-score <= 3; SUE <= 0; leverage < 0.2; investment grade; junk; unrated; index deletion.
+Added later (rules fixed before running), the large-cap test:
+  L1 S&P 500 members (at the signal date) where an officer or director filed an open-market purchase of
+     >= $100K in the prior 30 days; equal weight; 6-month and 1-year holds; any money not in signals is in
+     SPY. Compared with SPY on CAGR, Sharpe and max drawdown, all years / 2006-15 / 2016+.
+  L2 L1 restricted to a positive earnings surprise in the prior 90 days.
+  L3 L1 restricted to clusters (>= 2 insiders buying within 30 days).
+  L4 Same as L1 for S&P MidCap 400 members.
 """
 import numpy as np
 import pandas as pd
