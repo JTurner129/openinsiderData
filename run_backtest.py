@@ -4,12 +4,12 @@
     python run_backtest.py 3 4 5      # only phases 3-5 (re-uses earlier outputs)
 
 Phases: 1 data (SEC Form 4 purchases), 2 signals, 3 prices, 4 returns,
-5 analysis, 6 report. Every phase caches its downloads, so re-running after an
+5 analysis, 6 realistic trading and filter tests, 7 report. Every phase caches its downloads, so re-running after an
 interruption resumes instead of starting over.
 """
 import sys
 
-from backtest import analysis, prices, report, returns, signals
+from backtest import analysis, filters, prices, report, returns, signals
 from backtest.common import load_config
 import sec_insider_data
 
@@ -19,7 +19,8 @@ PHASES = {
     3: ('Prices', prices.run),
     4: ('Returns', returns.run),
     5: ('Analysis', analysis.run),
-    6: ('Report', report.build),
+    6: ('Realistic trading and filter tests', filters.run),
+    7: ('Report', report.build),
 }
 
 if __name__ == '__main__':

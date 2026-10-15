@@ -241,6 +241,79 @@ def excess_lines(es):
     return fig
 
 
+REALISM_SHORT = {
+    '1. As reported (open, daily rebalance, 0.5% cost)': 'As reported',
+    '2. + estimated spread costs': '+ spread costs',
+    '3. + buy-and-hold weights': '+ buy-and-hold',
+    '4. + enter at next close': '+ next close',
+    '5. Stress: 2× spread costs': '2× costs',
+    '6. Realistic + price ≥ $2': '+ price ≥ $2',
+    '7. Realistic + $100K/day volume': '+ $100K/day',
+    '8. Realistic + $1M/day volume': '+ $1M/day',
+}
+
+
+def realism_chart(realism, hold='3m'):
+    d = realism[realism['hold'] == hold]
+    fig = go.Figure()
+    for s in SCREENS:
+        x = d[d['screen'] == s]
+        fig.add_trace(go.Bar(x=[REALISM_SHORT.get(v, v) for v in x['step']], y=x['FF5+UMD+IWC alpha'] * 100,
+                             name=SCREENS[s][0], marker=dict(color=SCREEN_COLOR[s], line=dict(color=SURFACE, width=2)),
+                             customdata=np.c_[x['FF5+UMD+IWC t'], x['signals']],
+                             hovertemplate=SCREENS[s][0] + '<br>%{x}: %{y:.1f}% a year<br>t = %{customdata[0]:.2f}, '
+                                                           'signals %{customdata[1]:,}<extra></extra>'))
+    base_layout(fig, f'Alpha as trading assumptions get more realistic ({hold} hold, FF5 + momentum + micro-cap factor)',
+                'Assumptions (each step adds to the previous; steps 6–8 add a filter to step 4)', 'Alpha (% per year)', height=480)
+    fig.update_layout(barmode='group', hovermode='closest')
+    fig.update_yaxes(ticksuffix='%')
+    fig.add_hline(y=0, line=dict(color=AXIS, width=1))
+    return fig
+
+
+def filter_scatter(tests, hold='3m'):
+    d = tests[(tests['hold'] == hold) & (tests['filter'] != 'No filter (realistic)')]
+    fig = go.Figure()
+    for s, symbol in zip(['cluster3', 'exec200k'], ['circle', 'diamond']):
+        x = d[d['screen'] == s]
+        fig.add_trace(go.Scatter(
+            x=x['train vs baseline'] * 100, y=x['test vs baseline'] * 100, mode='markers', name=SCREENS[s][0],
+            marker=dict(size=10, symbol=symbol, color=SCREEN_COLOR[s], line=dict(color=SURFACE, width=2)),
+            text=x['filter'], customdata=np.c_[x['test t'], x['test_signals']],
+            hovertemplate='%{text}<br>2006–15 change: %{x:+.1f}%/yr<br>2016–26 change: %{y:+.1f}%/yr'
+                          '<br>2016–26 t = %{customdata[0]:.2f}, signals %{customdata[1]:,}<extra>' + SCREENS[s][0] + '</extra>'))
+    base_layout(fig, f'Does a filter that helped in 2006–2015 still help in 2016–2026? ({hold} hold)',
+                'Change in alpha vs no filter, 2006–2015 (%/yr)', 'Change in alpha vs no filter, 2016–2026 (%/yr)', height=520)
+    fig.add_hline(y=0, line=dict(color=AXIS, width=1))
+    fig.add_vline(x=0, line=dict(color=AXIS, width=1))
+    fig.update_xaxes(ticksuffix='%')
+    fig.update_yaxes(ticksuffix='%')
+    fig.update_layout(hovermode='closest')
+    return fig
+
+
+def survivors_chart(tests):
+    d = tests[tests['holds out of sample']].copy()
+    if d.empty:
+        d = tests[tests['filter'] != 'No filter (realistic)'].nlargest(10, 'test alpha')
+    d = d.sort_values('test alpha').tail(15)
+    labels = [f"{SCREENS[s][0].split(' (')[0]} · {f} · {h}" for s, f, h in zip(d['screen'], d['filter'], d['hold'])]
+    se = (d['test alpha'] / d['test t']).abs()
+    fig = go.Figure(go.Bar(
+        y=labels, x=d['test alpha'] * 100, orientation='h',
+        marker=dict(color=[SCREEN_COLOR[s] for s in d['screen']], line=dict(color=SURFACE, width=2)),
+        error_x=dict(type='data', array=1.96 * se * 100, color=INK2, thickness=1.2, width=4),
+        customdata=np.c_[d['test t'], d['test_signals'], d['train alpha'] * 100],
+        hovertemplate='%{y}<br>2016–26 alpha: %{x:.1f}%/yr (t = %{customdata[0]:.2f}, %{customdata[1]:,} signals)'
+                      '<br>2006–15 alpha: %{customdata[2]:.1f}%/yr<extra></extra>'))
+    base_layout(fig, 'Filters that helped in both periods: 2016–2026 alpha after estimated costs, with 95% intervals',
+                'Alpha 2016–2026 (% per year)', None, height=max(380, 34 * len(d) + 160))
+    fig.update_xaxes(ticksuffix='%')
+    fig.update_layout(hovermode='closest', showlegend=False, margin=dict(l=380))
+    fig.add_vline(x=0, line=dict(color=AXIS, width=1))
+    return fig
+
+
 def decay_bars(alphas):
     holds = ['1m', '3m', '6m', '1y']
     fig = go.Figure()
@@ -457,6 +530,7 @@ def build(cfg=None):
                  f'{scrape["latest_filing_date"]} ({scrape["rows"]:,} purchase filings). Signal date = filing date. '
                  f'Entry = next trading day\'s open. Prices: Yahoo Finance, adjusted for splits and dividends.</p>'
                  f'<nav><a href="#summary">Summary</a>{nav}<a href="#compare">Comparison</a><a href="#robust">Robustness</a>'
+                 f'<a href="#realistic">Realistic trading</a><a href="#filters">Filter tests</a>'
                  f'<a href="#data">Data &amp; coverage</a><a href="#method">Method</a></nav>')
 
     # Summary
@@ -574,6 +648,93 @@ def build(cfg=None):
                                                    'Median excess', 'Excess vs IWM']} |
                             {'t (vs SPY)': num, 't (vs IWM)': num, 'Signals': lambda v: f'{int(v):,}'},
                             color_cols=['Excess vs SPY', 'Excess vs IWM']))
+
+    # Realistic trading and filter tests (Phase 7), if they have been run
+    if (RESULTS / 'realistic_trading.csv').exists():
+        realism = pd.read_csv(RESULTS / 'realistic_trading.csv')
+        tests = pd.read_csv(RESULTS / 'filter_tests.csv')
+        combo = pd.read_csv(RESULTS / 'combined_filters.csv')
+        cap = pd.read_csv(RESULTS / 'capacity.csv')
+        per = pd.read_csv(RESULTS / 'realistic_per_trade.csv')
+        T.update({'realistic_trading': realism, 'filter_tests': tests, 'combined_filters': combo, 'capacity': cap,
+                  'realistic_per_trade': per})
+        parts.append('<h2 id="realistic">Does it survive realistic trading?</h2><p class="sub">The headline numbers assume '
+                     'a flat 0.5% round-trip cost, daily rebalancing and entry at the open. Here each assumption is replaced '
+                     'step by step. Alpha is from a regression on the Fama-French 5 factors, momentum <em>and</em> the iShares '
+                     'Micro-Cap ETF (IWC), so the plain micro-cap premium does not count as skill.</p>')
+        parts.append(ch.add('realism_steps', realism_chart(realism),
+                            'If the edge were an artefact of cheap-stock trading, the bars would collapse toward zero as '
+                            'costs, buy-and-hold weights and next-close entry are added.'))
+        rr = realism[realism['hold'] == '3m'].copy()
+        rr['Screen'] = rr['screen'].map(lambda k: SCREENS[k][0])
+        rr = rr[['Screen', 'step', 'signals', 'median_spread', 'FF5+UMD alpha', 'FF5+UMD+IWC alpha', 'FF5+UMD+IWC t',
+                 'test alpha', 'test t', '2020+ alpha', '2020+ t']]
+        rr.columns = ['Screen', 'Assumptions', 'Signals', 'Median est. spread', 'FF5+UMD alpha', '+ micro-cap factor',
+                      't', '2016–26 alpha', '2016–26 t', '2020+ alpha', '2020+ t']
+        parts.append('<h3>Step by step (3-month hold)</h3><p class="note">Spread = Corwin–Schultz estimate from daily '
+                     'highs and lows over the 20 days before entry, plus 0.2% for commission and impact, charged half on '
+                     'entry and half on exit. This estimator overstates spreads for liquid stocks (it gives Apple about '
+                     '0.4%), so costs here are conservative. Other holding periods are in results.xlsx.</p>')
+        parts.append(html_table(rr, {'Median est. spread': pct, 'FF5+UMD alpha': pct, '+ micro-cap factor': pct, 't': num,
+                                     '2016–26 alpha': pct, '2016–26 t': num, '2020+ alpha': pct, '2020+ t': num,
+                                     'Signals': lambda v: f'{int(v):,}'},
+                                color_cols=['+ micro-cap factor', '2016–26 alpha', '2020+ alpha']))
+        c2 = cap.copy()
+        c2['Screen'] = c2['screen'].map(lambda k: SCREENS[k][0])
+        c2 = c2[['Screen', 'median_price', 'median_adv', 'median_spread', 'median_cost_rt', 'median_market_cap',
+                 'share_price_under_2', 'share_adv_under_100k', 'median $ per trade at 10% of volume']]
+        c2.columns = ['Screen', 'Median price', 'Median $ volume/day', 'Median est. spread', 'Median round-trip cost',
+                      'Median market cap (2011+)', 'Under $2', 'Under $100K/day', '$ per trade at 10% of a day']
+        parts.append('<h3>How tradeable are these stocks?</h3>')
+        parts.append(html_table(c2, {'Median price': lambda v: f'${v:,.2f}', 'Median $ volume/day': money,
+                                     'Median est. spread': pct, 'Median round-trip cost': pct,
+                                     'Median market cap (2011+)': money, 'Under $2': pct, 'Under $100K/day': pct,
+                                     '$ per trade at 10% of a day': money}))
+        pt = per.copy()
+        pt['Screen'] = pt['screen'].map(lambda k: SCREENS[k][0])
+        pt = pt[['Screen', 'hold', 'benchmark', 'trades', 'mean net return', 'mean excess', 'median excess', 'hit rate vs benchmark']]
+        pt.columns = ['Screen', 'Hold', 'vs', 'Trades', 'Mean net return', 'Mean excess', 'Median excess', 'Hit rate']
+        parts.append('<h3>Per trade, realistic (next-close entry, estimated costs)</h3>')
+        parts.append(html_table(pt, {'Mean net return': pct, 'Mean excess': pct, 'Median excess': pct, 'Hit rate': pct,
+                                     'Trades': lambda v: f'{int(v):,}'}, color_cols=['Mean excess', 'Median excess']))
+
+        n_tests = int((tests['filter'] != 'No filter (realistic)').sum())
+        parts.append(f'<h2 id="filters">Filter tests</h2><p class="sub">{n_tests} filter tests on the two base screens '
+                     f'(clusters ≥3 and CEO/CFO/COB ≥$200K) at 1-month, 3-month and 1-year holds, all under the realistic '
+                     f'setup above. A filter "holds" if it improved alpha in 2006–2015 <em>and</em> in 2016–2026, and the '
+                     f'2016–2026 alpha is significant. With this many tests some will look good by chance, so the Holm '
+                     f'column corrects the p-value for the number of tests.</p>')
+        parts.append(ch.add('filter_scatter', filter_scatter(tests),
+                            'Points in the top-right helped in both periods. Points scattered evenly around the centre would '
+                            'mean filter results are mostly noise.'))
+        parts.append(ch.add('filter_survivors', survivors_chart(tests),
+                            'Only filters that held up out of sample are shown; bars whose interval crosses zero are not reliable.'))
+        if len(combo):
+            cb = combo.copy()
+            cb['Screen'] = cb['screen'].map(lambda k: SCREENS[k][0])
+            cb = cb[['Screen', 'hold', 'filters (chosen on 2006–2015)', 'train_signals', 'test_signals', 'train alpha',
+                     'test alpha', 'test t', '2020+ alpha', '2020+ t']]
+            cb.columns = ['Screen', 'Hold', 'Filters picked using 2006–2015 only', 'Signals 2006–15', 'Signals 2016–26',
+                          'Alpha 2006–15', 'Alpha 2016–26', 't 2016–26', 'Alpha 2020+', 't 2020+']
+            parts.append('<h3>Best combination, chosen without looking at 2016–2026</h3><p class="note">Up to three filters were '
+                         'added one at a time, each only if it raised 2006–2015 alpha. The 2016–2026 columns are the honest '
+                         'out-of-sample test.</p>')
+            parts.append(html_table(cb, {'Alpha 2006–15': pct, 'Alpha 2016–26': pct, 't 2016–26': num, 'Alpha 2020+': pct,
+                                         't 2020+': num}, color_cols=['Alpha 2016–26', 'Alpha 2020+']))
+        ft = tests.copy()
+        ft['Screen'] = ft['screen'].map(lambda k: SCREENS[k][0])
+        ft = ft.sort_values(['screen', 'hold', 'test vs baseline'], ascending=[True, True, False])
+        ft = ft[['Screen', 'hold', 'group', 'filter', 'signals', 'train alpha', 'test alpha', 'test t', 'train vs baseline',
+                 'test vs baseline', '2020+ alpha', 'holm p', 'holds out of sample']]
+        ft['holds out of sample'] = ft['holds out of sample'].map({True: '✓', False: ''})
+        ft.columns = ['Screen', 'Hold', 'Group', 'Filter', 'Signals', 'Alpha 2006–15', 'Alpha 2016–26', 't 2016–26',
+                      'Δ vs none 2006–15', 'Δ vs none 2016–26', 'Alpha 2020+', 'Holm p (full period)', 'Holds']
+        parts.append('<h3>Every filter</h3>')
+        parts.append(html_table(ft, {'Alpha 2006–15': pct, 'Alpha 2016–26': pct, 't 2016–26': num, 'Δ vs none 2006–15': pct,
+                                     'Δ vs none 2016–26': pct, 'Alpha 2020+': pct,
+                                     'Holm p (full period)': lambda v: '–' if pd.isna(v) else f'{v:.3f}',
+                                     'Signals': lambda v: f'{int(v):,}'},
+                                color_cols=['Δ vs none 2006–15', 'Δ vs none 2016–26']))
 
     # Data & coverage
     parts.append('<h2 id="data">Data &amp; coverage</h2>')

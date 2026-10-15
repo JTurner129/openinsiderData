@@ -62,4 +62,5 @@ backtest:
   fund_sic_range: [6720, 6799]
   min_signals_heatmap: 10
   benchmarks: ["SPY", "IWM"]
+  extra_benchmarks: ["IWC"]    # iShares Micro-Cap ETF, used in the filter / cost-robustness tests
   price_mismatch_tolerance: 2.0 # Max ratio between insider trade price and market price before a ticker match is rejected

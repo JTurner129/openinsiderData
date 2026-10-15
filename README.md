@@ -46,7 +46,8 @@ under GitHub's file-size limit; pandas and Excel's Power Query read them directl
 | 3 Prices | `python run_backtest.py 3` | Adjusted daily prices from Yahoo for every signal ticker, each company's current SEC ticker, SPY and IWM | `data/prices.parquet`, `data/prices.csv.gz` (not committed), `data/price_cleaning.json`, `data/alternate_tickers.json` |
 | 4 Returns | `python run_backtest.py 4` | Per-signal returns at 1w/1m/3m/6m/1y, excess vs SPY and IWM, after costs | `data/trade_returns.*`, `data/trade_returns_all_variants.*` |
 | 5 Analysis | `python run_backtest.py 5` | Event study, calendar-time portfolios, CAPM and FF5+momentum alphas, robustness | `results/*.csv`, `data/portfolio_daily_returns.*` |
-| 6 Report | `python run_backtest.py 6` | Builds `report.html`, PNG charts and `results/results.xlsx` | `report.html`, `results/` |
+| 6 Realistic trading & filters | `python run_backtest.py 6` | Re-tests every screen with estimated spreads, buy-and-hold weights, next-close entry and a micro-cap factor; then tests ~35 filters, choosing on 2006–2015 and checking on 2016–2026 | `results/realistic_trading.csv`, `results/filter_tests.csv`, `results/combined_filters.csv`, `results/capacity.csv`, `data/signal_features.*` |
+| 7 Report | `python run_backtest.py 7` | Builds `report.html`, PNG charts and `results/results.xlsx` | `report.html`, `results/` |
 
 Every download is cached in `.cache/` (SEC quarters, SEC company info, Yahoo prices, French
 factors), so an interrupted run resumes where it stopped. Delete a cache folder to force a refresh.
@@ -102,6 +103,30 @@ Each company can signal at most once per screen every 90 days (`dedupe_days`).
 - Sharpe and Sortino use the Fama-French risk-free rate. Alphas regress daily portfolio excess returns on Mkt-RF (CAPM) and on Mkt-RF, SMB, HML, RMW, CMA and UMD from Kenneth French's data library, with Newey-West (5 lag) standard errors, annualized ×252. The French data ends a month or two before today, so the regressions stop there.
 - Eras: pre-2010 (2006–2009), 2010–2019, 2020+.
 - De-dupe windows of 0 and 30 days give identical cluster signals, because a cluster can only fire again after its 30-day condition has lapsed anyway.
+
+## Realistic trading and filter tests (Phase 6)
+
+The headline backtest uses a flat 0.5% round-trip cost, equal weights rebalanced daily and entry at the open. Phase 6
+replaces each assumption to see whether the edge is an artefact of trading cheap, illiquid stocks:
+
+- **Costs per stock**: Corwin–Schultz (2012) bid-ask spread from daily highs and lows (median of the 20 days before entry,
+  floored at one tick) plus 0.2% for commission and impact, charged half on entry and half on exit; also a 2× stress test.
+  The estimator overstates spreads for liquid stocks (about 0.4% for Apple), so costs are conservative.
+- **Buy-and-hold weights**: equal dollars at entry, then each position drifts with its price (no daily rebalancing,
+  which removes the bid-ask-bounce bias of rebalanced equal-weight portfolios of illiquid stocks).
+- **Entry at the next close** instead of the open.
+- **Micro-cap factor**: alphas regress on Fama-French 5 factors, momentum and IWC (iShares Micro-Cap ETF) excess returns.
+- **Liquidity floors**: price ≥ $2, 20-day average dollar volume ≥ $100K and ≥ $1M.
+
+Filters tested (each on clusters ≥3 and CEO/CFO/COB ≥$200K, at 1-month, 3-month and 1-year holds, all under the
+realistic setup): price and volume floors, estimated spread, market cap (SEC XBRL shares outstanding, available
+from 2011), purchase size relative to market cap, total bought, ownership increase, new positions, whether the
+cluster includes a CEO/CFO/COB, 10% owners, directors only, opportunistic vs routine buyers (Cohen, Malloy &
+Pomorski 2012: routine = bought in the same calendar month in each of the 3 prior years), first purchase in 2+ years,
+prior 1/3/6-month returns, distance from the 52-week low and high, filing speed, and sector (SIC). A filter "holds"
+if it improved alpha in both 2006–2015 and 2016–2026 and its 2016–2026 alpha has t ≥ 1.96; p-values are also Holm-
+corrected for the number of tests. A combined filter is built by greedily adding up to three filters using
+2006–2015 data only, then reported on 2016–2026.
 
 ## Known limitations
 

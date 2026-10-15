@@ -31,17 +31,21 @@ def _from_download(raw, sym):
         return None
     if 'Stock Splits' not in df:
         df['Stock Splits'] = 0.0
-    df = df[['Open', 'Close', 'Adj Close', 'Volume', 'Stock Splits']].copy()
+    df = df[['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume', 'Stock Splits']].copy()
     df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
     return df
 
 
 def _finalize(df):
-    """Add adjusted open and split-unadjusted (as-traded) close."""
+    """Adjusted open/high/low/close, split-unadjusted (as-traded) close and dollar volume."""
     out = pd.DataFrame(index=df.index)
     ratio = (df['Adj Close'] / df['Close']).replace([np.inf, -np.inf], np.nan)
     out['adj_close'] = df['Adj Close']
     out['adj_open'] = df['Open'] * ratio
+    out['adj_high'] = df['High'] * ratio
+    out['adj_low'] = df['Low'] * ratio
+    # Split-adjusted close x split-adjusted volume = dollars actually traded that day.
+    out['dollar_volume'] = df['Close'] * df['Volume']
     # yfinance 'Close' is split-adjusted; undo splits that happened after each date.
     splits = df['Stock Splits'].fillna(0.0).replace(0.0, 1.0)
     later = splits[::-1].cumprod()[::-1].shift(-1).fillna(1.0)
@@ -65,14 +69,17 @@ class _YahooErrors(logging.Handler):
         return any(re.search(r'rate.?limit|too many requests', l, re.IGNORECASE) for l in self.lines)
 
 
-def download_prices(tickers, refresh_missing=False, batch=BATCH, pause=1.5):
+def download_prices(tickers, refresh_missing=False, batch=BATCH, pause=1.5, upgrade=False):
     PRICE_CACHE.mkdir(parents=True, exist_ok=True)
     missing_path = PRICE_CACHE / '_missing.json'
     missing = json.loads(missing_path.read_text()) if missing_path.exists() else {}
     todo = []
     for t in tickers:
-        if (PRICE_CACHE / f'{yahoo_symbol(t)}.parquet').exists():
-            continue
+        path = PRICE_CACHE / f'{yahoo_symbol(t)}.parquet'
+        if path.exists():
+            # upgrade=True re-downloads files cached before high/low/dollar volume were stored
+            if not (upgrade and 'adj_high' not in pd.read_parquet(path).columns):
+                continue
         if t in missing and not refresh_missing:
             continue
         todo.append(t)
@@ -156,9 +163,17 @@ def clean_bad_prints(df):
         df['raw_close'] = df['raw_close'] * np.where(spiked, close / df['adj_close'].values / scale, 1.0)
         df['adj_close'] = close
         df['adj_open'] = op
+        for c in ('adj_high', 'adj_low'):
+            if c in df:
+                # spiked days carry no usable range; rescaled history moves with the close
+                df[c] = np.where(spiked, close, df[c].values * scale)
     with np.errstate(divide='ignore', invalid='ignore'):
         bad_open = ~(op > 0) | (np.abs(np.log(op / close)) >= SPIKE)
     df.loc[bad_open, 'adj_open'] = df.loc[bad_open, 'adj_close']
+    if 'adj_high' in df:
+        # keep the day's range consistent with the (possibly repaired) open and close
+        df['adj_high'] = np.fmax(df['adj_high'], np.fmax(df['adj_open'], df['adj_close']))
+        df['adj_low'] = np.fmin(df['adj_low'], np.fmin(df['adj_open'], df['adj_close']))
     df.attrs.update(zero_days_dropped=zero, spikes_fixed=int(spiked.sum()), opens_fixed=int(bad_open.sum()),
                     level_shifts_fixed=int(len(shifts)))
     return df
