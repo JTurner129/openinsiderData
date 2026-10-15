@@ -120,7 +120,9 @@ replaces each assumption to see whether the edge is an artefact of trading cheap
 
 Filters tested (each on clusters ≥3 and CEO/CFO/COB ≥$200K, at 1-month, 3-month and 1-year holds, all under the
 realistic setup): price and volume floors, estimated spread, market cap (SEC XBRL shares outstanding, available
-from 2011), purchase size relative to market cap, total bought, ownership increase, new positions, whether the
+from 2011; bands <$50M, $50M–$300M, $300M–$2B, ≥$2B), price-to-book (SEC XBRL stockholders' equity, used only
+from 95 days after quarter-end; negative book value is its own group, never "cheap"), purchase size relative to
+market cap, total bought, ownership increase, new positions, whether the
 cluster includes a CEO/CFO/COB, 10% owners, directors only, opportunistic vs routine buyers (Cohen, Malloy &
 Pomorski 2012: routine = bought in the same calendar month in each of the 3 prior years), first purchase in 2+ years,
 prior 1/3/6-month returns, distance from the 52-week low and high, filing speed, and sector (SIC). A filter "holds"

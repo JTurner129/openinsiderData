@@ -113,6 +113,39 @@ def fetch_shares_frames(cfg):
     return df
 
 
+def fetch_book_frames(cfg):
+    """Book value (total stockholders' equity) per company-quarter from SEC XBRL frames."""
+    path = CACHE / 'sec_book_equity.parquet'
+    if path.exists():
+        return pd.read_parquet(path)
+    headers = {'User-Agent': cfg['sec']['user_agent'], 'Accept-Encoding': 'gzip, deflate'}
+    rows = []
+    tags = ['StockholdersEquity', 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest']
+    for pri, tag in enumerate(tags):
+        for year in range(2009, pd.Timestamp.today().year + 1):
+            for q in range(1, 5):
+                url = f'https://data.sec.gov/api/xbrl/frames/us-gaap/{tag}/USD/CY{year}Q{q}I.json'
+                for attempt in range(3):
+                    time.sleep(0.25 * (2 ** attempt))
+                    r = requests.get(url, headers=headers, timeout=60)
+                    if r.status_code in (200, 404):
+                        break
+                if r.status_code != 200:
+                    continue
+                for d in r.json().get('data', []):
+                    rows.append((int(d['cik']), d['end'], float(d['val']), pri))
+    df = pd.DataFrame(rows, columns=['cik', 'end', 'book_equity', 'priority'])
+    df['end'] = pd.to_datetime(df['end'])
+    # Prefer equity attributable to the parent; fall back to total including minority interests.
+    df = df.sort_values(['cik', 'end', 'priority']).drop_duplicates(['cik', 'end']).drop(columns='priority')
+    df.to_parquet(path, index=False)
+    LOG.info(f"SEC book equity: {len(df):,} company-quarters for {df['cik'].nunique():,} companies")
+    return df
+
+
+BOOK_LAG_DAYS = 95   # a quarter's balance sheet is assumed public 95 days after quarter-end
+
+
 # --- Insider-history features ----------------------------------------------------------
 def insider_history_flags(purchases):
     """Per filing: routine (same calendar month purchase in each of the prior
@@ -158,6 +191,8 @@ def build_features(trades, cfg, market):
     info = json.loads((CACHE / 'sec_company_info.json').read_text())
     shares = fetch_shares_frames(cfg)
     shares_by_cik = {c: g for c, g in shares.groupby('cik')}
+    book = fetch_book_frames(cfg)
+    book_by_cik = {c: g for c, g in book.groupby('cik')}
     cal = market.cal
 
     feats = []
@@ -194,10 +229,18 @@ def build_features(trades, cfg, market):
                 g = g[g['end'] <= t['signal_date']]
                 if len(g) and (t['signal_date'] - g['end'].iloc[-1]).days <= 400:
                     f['market_cap'] = g['shares'].iloc[-1] * t['entry_price_raw']
+            b = book_by_cik.get(int(t['issuer_cik']))
+            if b is not None:
+                b = b[b['end'] + pd.Timedelta(days=BOOK_LAG_DAYS) <= t['signal_date']]
+                if len(b) and (t['signal_date'] - b['end'].iloc[-1]).days <= 500:
+                    f['book_equity'] = b['book_equity'].iloc[-1]
         feats.append(f)
     F = pd.DataFrame(feats).set_index('idx')
     out = trades.join(F)
     out['value_to_mcap'] = out['total_value'] / out['market_cap']
+    # Price-to-book; undefined (NaN) when book value is zero or negative, which is flagged separately.
+    out['price_to_book'] = (out['market_cap'] / out['book_equity']).where(out['book_equity'] > 0)
+    out['negative_book'] = out['book_equity'] <= 0
     # Round-trip trading cost: estimated full spread (pay half each way) plus commission/impact.
     # Floor the spread at one tick (1 cent, or 0.01% for sub-dollar stocks); fall back to the
     # screen's median spread when no estimate is available.
@@ -369,6 +412,10 @@ def filter_definitions(F):
         ('Size (2011+)', 'Market cap ≥ $2B', q('market_cap', ge, 2e9)),
         ('Size (2011+)', 'Bought ≥ 0.1% of market cap', q('value_to_mcap', ge, 0.001)),
         ('Size (2011+)', 'Bought ≥ 1% of market cap', q('value_to_mcap', ge, 0.01)),
+        ('Value (2011+)', 'Price-to-book ≤ 1', q('price_to_book', le, 1.0)),
+        ('Value (2011+)', 'Price-to-book ≤ 1.5', q('price_to_book', le, 1.5)),
+        ('Value (2011+)', 'Price-to-book > 3', lambda d: d['price_to_book'] > 3),
+        ('Value (2011+)', 'Negative book value', lambda d: d['negative_book'] == True),  # noqa: E712
         ('Conviction', 'Total bought ≥ $500K', q('total_value', ge, 5e5)),
         ('Conviction', 'Total bought ≥ $1M', q('total_value', ge, 1e6)),
         ('Conviction', 'Ownership up ≥ 10%', q('max_own_increase', ge, 0.10)),
@@ -452,7 +499,7 @@ def combined_filter(F, market, factors, tests):
         for hname, hd in HOLDS.items():
             cand = tests[(tests['screen'] == screen) & (tests['hold'] == hname) & (tests['filter'] != 'No filter (realistic)')
                          & (tests['train vs baseline'] > 0) & (tests['train t'] >= 2) & (tests['train_signals'] >= 100)]
-            cand = cand[~cand['group'].isin(['Size (2011+)'])]   # no market cap before 2011
+            cand = cand[~cand['group'].isin(['Size (2011+)', 'Value (2011+)'])]   # no SEC fundamentals before 2011
             chosen, t = [], base
             for _, c in cand.sort_values('train alpha', ascending=False).iterrows():
                 if len(chosen) == 3:
