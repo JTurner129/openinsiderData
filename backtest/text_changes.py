@@ -3,7 +3,7 @@
 Rules fixed before any filing was downloaded:
 
   Filings: 10-K (and 10-K405 / 10-KSB) and 10-Q (and 10-QSB), originals only, 2004 onward, for every
-  company with a US Compustat record. Only the main document is read (the first <DOCUMENT> in the
+  company with a US-headquartered Compustat record. Only the main document is read (the first <DOCUMENT> in the
   submission), streamed and discarded after scoring.
 
   Text: HTML stripped, lowercased, words of 2+ letters. Each filing is compared with the same company's
@@ -66,8 +66,8 @@ def filing_list(cfg):
     if path.exists():
         return pd.read_parquet(path)
     from .compustat import wrds_dir
-    co = pd.read_parquet(wrds_dir(cfg) / 'compustat_company.parquet', columns=['cik', 'fic'])
-    ciks = set(pd.to_numeric(co.loc[co['fic'] == 'USA', 'cik'], errors='coerce').dropna().astype(int))
+    co = pd.read_parquet(wrds_dir(cfg) / 'compustat_company.parquet', columns=['cik', 'loc'])
+    ciks = set(pd.to_numeric(co.loc[co['loc'] == 'USA', 'cik'], errors='coerce').dropna().astype(int))
     s = requests.Session()
     s.headers['User-Agent'] = cfg['sec']['user_agent']
     rows = []
