@@ -320,11 +320,11 @@ def combo_scatter(search, hold):
     for sc, symbol in zip(['cluster3', 'exec200k'], ['circle', 'diamond']):
         d = search[(search['screen'] == sc) & (search['hold'] == hold)].dropna(subset=['train alpha', 'test alpha'])
         top = d.nlargest(20, 'train t')
-        fig.add_trace(go.Scattergl(
+        fig.add_trace(go.Scatter(
             x=d['train alpha'] * 100, y=d['test alpha'] * 100, mode='markers', name=f'{SCREENS[sc][0]}: all combinations',
             marker=dict(size=5, symbol=symbol, color=SCREEN_COLOR[sc], opacity=0.25), text=d['combo'],
             hovertemplate='%{text}<br>2006–15: %{x:.1f}%/yr<br>2016–26: %{y:.1f}%/yr<extra></extra>'))
-        fig.add_trace(go.Scattergl(
+        fig.add_trace(go.Scatter(
             x=top['train alpha'] * 100, y=top['test alpha'] * 100, mode='markers', name=f'{SCREENS[sc][0]}: top 20 picked on 2006–15',
             marker=dict(size=11, symbol=symbol, color=SCREEN_COLOR[sc], line=dict(color=INK, width=1.5)), text=top['combo'],
             hovertemplate='%{text}<br>2006–15: %{x:.1f}%/yr<br>2016–26: %{y:.1f}%/yr<extra>top 20</extra>'))
@@ -522,6 +522,17 @@ def summary_bullets(head, es, alphas, miss, T):
                  f'weights (−{pct(r.loc[sp, "FF5+UMD+IWC alpha"] - r.loc[bh, "FF5+UMD+IWC alpha"])} a year), not from costs '
                  f'(−{pct(r.loc[first, "FF5+UMD+IWC alpha"] - r.loc[sp, "FF5+UMD+IWC alpha"])}). See <a href="#realistic">Realistic trading</a> and '
                  f'<a href="#filters">Filter tests</a>.')
+    cp = RESULTS / 'bigdrop_control.csv'
+    if cp.exists():
+        c = pd.read_csv(cp)
+        c = c[c['hold'] == '1y'].set_index('portfolio')
+        strat = c.loc[[i for i in c.index if i.startswith('Big-drop')][0]]
+        ctrl = c.loc[[i for i in c.index if 'equal weight per date' in i][0]]
+        b.append(f'<strong>The best-looking filter is probably survivorship bias.</strong> Cluster buys after a ≥50% drop '
+                 f'earned {pct(strat["full alpha"])} alpha a year, but stocks that fell just as far on the same days '
+                 f'<em>without</em> insider buying earned {pct(ctrl["full alpha"])}. Crashed stocks that are still in '
+                 f'Yahoo\'s data are the ones that recovered, so this result needs delisted-stock data before anyone trades it. '
+                 f'See <a href="#stress">Stress tests</a>.')
     mx = miss[miss['signal_year'] == 'All']
     early = miss[miss['signal_year'].isin([str(y) for y in range(2006, 2012)])]
     early_cov = 1 - (early['signals'] * early['pct_missing']).sum() / early['signals'].sum()

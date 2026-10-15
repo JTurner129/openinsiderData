@@ -130,6 +130,25 @@ if it improved alpha in both 2006–2015 and 2016–2026 and its 2016–2026 alp
 corrected for the number of tests. A combined filter is built by greedily adding up to three filters using
 2006–2015 data only, then reported on 2016–2026.
 
+## Combination search, stress tests and track record (also Phase 6)
+
+All use the practical setup: zero fees, full estimated spread, buy-and-hold weights, next-open entry.
+
+- **Combination search** (`backtest/combos.py`): every single filter, every pair, and triples among the 20 best
+  singles, scored on 2006–2015 signals and checked on separate 2016–2026 signals; plus a walk-forward that re-picks
+  the best combination each year from past data only. Each signal's daily contribution is a sparse row, so a
+  portfolio for any subset is one matrix product (~10 ms). Outputs: `results/combo_*.csv`.
+- **Stress tests** for clusters ≥3 after a ≥50% six-month drop (`backtest/robust.py`): leave out 2008–09, 2020 and
+  2022; block bootstrap by month, quarter and year (1,000 draws); IWC and IWM hedges; and a control group of stocks
+  in the price data that fell ≥50% on the same day without an insider cluster within 6 months. Outputs:
+  `results/bigdrop_*.csv`.
+- **Insider track record**: an insider is "proven" at a signal date with ≥2 earlier purchases whose 6-month
+  outcome was already known, averaging above SPY. Outputs: `results/track_record.csv`.
+
+Important: the control group earns *more* than the insider strategy, which points to survivorship bias in the
+Yahoo price data (crashed stocks still listed are the ones that recovered). Treat big-drop results as unproven
+until rerun with delisted-stock prices.
+
 ## Known limitations
 
 - **Survivorship bias (the big one).** Yahoo lacks most delisted stocks. Only about 40-55% of signals could be priced overall, and under 30% for 2006-2011. Those signals are reported as missing, not dropped, but the priced sample leans toward survivors, which flatters returns. For a cleaner test, swap Phase 3 to a source with delisted history: Norgate Data (paid), Tiingo or EODHD (API key; free tiers are too small for ~8,000 tickers), or CRSP via WRDS (academic). Only `backtest/prices.py` needs to change: write the same per-ticker Parquet files (`adj_open`, `adj_close`, `raw_close`, `volume`) into `.cache/prices/`.
