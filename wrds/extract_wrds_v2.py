@@ -75,7 +75,7 @@ def main():
         save(db, 'compustat_index_names', 'select gvkeyx, conm, indexcat, idxcstflg, tic from comp.idx_index')
     if readable(db, 'comp', 'adsprate'):
         save(db, 'compustat_ratings',
-             f"select gvkey, datadate, splticrm, spsdrm, spcsrc from comp.adsprate where gvkey in {USA}",
+             f"select gvkey, datadate, splticrm, spsdrm from comp.adsprate where gvkey in {USA}",
              ['datadate'])
     print('\nDone. Files in', OUT)
     for f in sorted(os.listdir(OUT)):
