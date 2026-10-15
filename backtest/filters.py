@@ -428,9 +428,12 @@ def filter_definitions(F):
         ('Who', 'All first buy in 2+ years (2008+)', lambda d: d['all_first_in_2y'] == True),  # noqa: E712
         ('Timing', 'Stock down ≥ 10% in prior month', q('ret_prior_1m', le, -0.10)),
         ('Timing', 'Stock down ≥ 20% in prior 3 months', q('ret_prior_3m', le, -0.20)),
+        ('Timing', 'Stock down ≥ 30% in prior 3 months', q('ret_prior_3m', le, -0.30)),
+        ('Timing', 'Stock down ≥ 50% in prior 6 months', q('ret_prior_6m', le, -0.50)),
         ('Timing', 'Stock up in prior 6 months', q('ret_prior_6m', ge, 0)),
         ('Timing', 'Within 10% of 52-week low', q('pct_above_52w_low', le, 0.10)),
         ('Timing', '≥ 30% below 52-week high', q('pct_below_52w_high', ge, 0.30)),
+        ('Timing', '≥ 50% below 52-week high', q('pct_below_52w_high', ge, 0.50)),
         ('Timing', 'Filed within 2 days of trade', q('max_filing_lag_days', le, 2)),
         ('Sector', 'Exclude biotech/pharma', lambda d: d['sector'] != 'biotech/pharma'),
         ('Sector', 'Biotech/pharma only', lambda d: d['sector'] == 'biotech/pharma'),
