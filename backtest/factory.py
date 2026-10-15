@@ -167,7 +167,7 @@ def strategy_returns(keep, B):
 
 def select(R, N, spy_m, rf_m, lookback, top, by):
     """Each January, pick the top strategies by trailing performance; hold for 12 months."""
-    filled = R.where(N >= MIN_NAMES, spy_m.reindex(R.index).values[:, None])
+    filled = R.where(N >= MIN_NAMES, spy_m.reindex(R.index), axis=0)
     out, picks = pd.Series(np.nan, index=R.index), {}
     years = sorted({d.year for d in R.index if d >= START})
     for y in years:
@@ -189,7 +189,7 @@ def select(R, N, spy_m, rf_m, lookback, top, by):
 
 def pbo(R, N, spy_m, rf_m, blocks=16):
     """Probability of Backtest Overfitting via combinatorially symmetric cross-validation."""
-    X = R.where(N >= MIN_NAMES, spy_m.reindex(R.index).values[:, None]).loc[START:]
+    X = R.where(N >= MIN_NAMES, spy_m.reindex(R.index), axis=0).loc[START:]
     X = X.loc[:, X.notna().mean() > 0.9].fillna(0.0)
     ex = X.sub(rf_m.reindex(X.index).values, axis=0)
     parts = np.array_split(np.arange(len(ex)), blocks)
@@ -214,12 +214,16 @@ def run(cfg=None):
     from .strategies import perf
     spy_px = load_price('SPY')
     cal = spy_px.index.values
-    keep, B = build_blocks(cfg, cal)
-    LOG.info(f'factory: {len(keep):,} stock-months, {B.shape[1]} building blocks; block frequencies: ' +
-             ', '.join(f'{c} {B[c].mean():.1%}' for c in B.columns))
-    R, N = strategy_returns(keep, B)
-    R.to_parquet(DATA / 'factory_strategy_returns.parquet')
-    N.to_parquet(DATA / 'factory_strategy_counts.parquet')
+    if (DATA / 'factory_strategy_returns.parquet').exists() and (DATA / 'factory_strategy_counts.parquet').exists():
+        R = pd.read_parquet(DATA / 'factory_strategy_returns.parquet')
+        N = pd.read_parquet(DATA / 'factory_strategy_counts.parquet')
+    else:
+        keep, B = build_blocks(cfg, cal)
+        LOG.info(f'factory: {len(keep):,} stock-months, {B.shape[1]} building blocks; block frequencies: ' +
+                 ', '.join(f'{c} {B[c].mean():.1%}' for c in B.columns))
+        R, N = strategy_returns(keep, B)
+        R.to_parquet(DATA / 'factory_strategy_returns.parquet')
+        N.to_parquet(DATA / 'factory_strategy_counts.parquet')
     me = lambda s: (1 + s).groupby(s.index.to_period('M')).prod() - 1
     spy_m = me(spy_px['adj_close'].pct_change().dropna())
     spy_m.index = spy_m.index.to_timestamp('M')
