@@ -57,45 +57,67 @@ def build_cache(cfg=None, force=False):
     if not files:
         raise FileNotFoundError(f'No compustat_daily_*.parquet files in {src}')
     cols = ['gvkey', 'iid', 'datadate', 'prccd', 'prcod', 'prchd', 'prcld', 'cshtrd', 'cshoc', 'ajexdi', 'trfd', 'exchg']
-    parts = []
-    for f in files:
+    num = ['prccd', 'prcod', 'prchd', 'prcld', 'cshtrd', 'cshoc', 'ajexdi', 'trfd']
+    # Pass 1: re-bucket every quarterly file by security, so pass 2 can hold one bucket in memory
+    NB = 64
+    tmp = CACHE / 'cs_buckets'
+    if tmp.exists():
+        for f in tmp.glob('*'):
+            f.unlink()
+    tmp.mkdir(parents=True, exist_ok=True)
+    for k, f in enumerate(files):
         t = pq.read_table(f, columns=[c for c in cols if c in pq.read_schema(f).names]).to_pandas()
-        t = t[pd.to_numeric(t['prccd'], errors='coerce') > 0]
+        t['prccd'] = pd.to_numeric(t['prccd'], errors='coerce')
+        t = t[t['prccd'] > 0]
         t['sec'] = t['gvkey'].astype(str) + '_' + t['iid'].astype(str)
         t['date'] = pd.to_datetime(t['datadate'])
-        num = ['prccd', 'prcod', 'prchd', 'prcld', 'cshtrd', 'cshoc', 'ajexdi', 'trfd']
         for c in num:
             t[c] = pd.to_numeric(t[c], errors='coerce').astype('float64')
         t['exchg'] = pd.to_numeric(t['exchg'], errors='coerce').astype('float32')
-        parts.append(t[['sec', 'date'] + num + ['exchg']])
-        LOG.info(f'  read {f.name}: {len(t):,} rows')
-    d = pd.concat(parts, ignore_index=True).sort_values(['sec', 'date']).drop_duplicates(['sec', 'date'])
-    LOG.info(f'Compustat daily: {len(d):,} rows, {d["sec"].nunique():,} securities')
+        t['bucket'] = pd.util.hash_array(t['sec'].to_numpy(dtype=object)) % NB
+        for bkt, g in t.groupby('bucket'):
+            g[['sec', 'date'] + num + ['exchg']].to_parquet(tmp / f'b{bkt:02d}_{k:03d}.parquet', index=False)
+        if (k + 1) % 20 == 0:
+            LOG.info(f'  bucketed {k + 1}/{len(files)} files')
 
+    # Pass 2: one bucket at a time, one file per security
     CS_CACHE.mkdir(parents=True, exist_ok=True)
+    for old in CS_CACHE.glob('CS_*.parquet'):
+        old.unlink()
     meta = []
-    for sec, g in d.groupby('sec', sort=False):
-        g = g.set_index('date')
-        aj = g['ajexdi'].replace(0, np.nan).ffill().bfill().fillna(1.0)
-        tr = g['trfd'].replace(0, np.nan).ffill().bfill().fillna(1.0)
-        f = tr / aj                                     # split- and dividend-adjusted factor
-        out = pd.DataFrame({
-            'adj_close': g['prccd'] * f,
-            'adj_open': g['prcod'] * f,
-            'adj_high': g['prchd'] * f,
-            'adj_low': g['prcld'] * f,
-            'dollar_volume': g['prccd'] * g['cshtrd'],
-            'raw_close': g['prccd'],                    # Compustat prices are as traded
-            'volume': g['cshtrd'],
-            'shares_out': g['cshoc'],
-        }, index=g.index)
-        out.index.name = 'Date'
-        out.astype('float64').to_parquet(CS_CACHE / f'CS_{sec}.parquet')
-        ex = g['exchg'].dropna()
-        meta.append({'sec': sec, 'first_date': g.index.min(), 'last_date': g.index.max(), 'rows': len(g),
-                     'last_exchg': ex.iloc[-1] if len(ex) else np.nan,
-                     'main_exchg': ex.mode().iloc[0] if len(ex) else np.nan,
-                     'median_dollar_volume': float((g['prccd'] * g['cshtrd']).median())})
+    total = 0
+    for bkt in range(NB):
+        parts = sorted(tmp.glob(f'b{bkt:02d}_*.parquet'))
+        if not parts:
+            continue
+        d = pd.concat([pd.read_parquet(x) for x in parts], ignore_index=True)
+        d = d.sort_values(['sec', 'date']).drop_duplicates(['sec', 'date'])
+        total += len(d)
+        for sec, g in d.groupby('sec', sort=False):
+            g = g.set_index('date')
+            aj = g['ajexdi'].replace(0, np.nan).ffill().bfill().fillna(1.0)
+            tr = g['trfd'].replace(0, np.nan).ffill().bfill().fillna(1.0)
+            f = tr / aj                                     # split- and dividend-adjusted factor
+            out = pd.DataFrame({
+                'adj_close': g['prccd'] * f,
+                'adj_open': g['prcod'] * f,
+                'adj_high': g['prchd'] * f,
+                'adj_low': g['prcld'] * f,
+                'dollar_volume': g['prccd'] * g['cshtrd'],
+                'raw_close': g['prccd'],                    # Compustat prices are as traded
+                'volume': g['cshtrd'],
+                'shares_out': g['cshoc'],
+            }, index=g.index)
+            out.index.name = 'Date'
+            out.astype('float64').to_parquet(CS_CACHE / f'CS_{sec}.parquet')
+            ex = g['exchg'].dropna()
+            meta.append({'sec': sec, 'first_date': g.index.min(), 'last_date': g.index.max(), 'rows': len(g),
+                         'last_exchg': ex.iloc[-1] if len(ex) else np.nan,
+                         'main_exchg': ex.mode().iloc[0] if len(ex) else np.nan,
+                         'median_dollar_volume': float((g['prccd'] * g['cshtrd']).median())})
+        for x in parts:
+            x.unlink()
+    LOG.info(f'Compustat daily: {total:,} rows, {len(meta):,} securities')
     meta = pd.DataFrame(meta)
     meta[['gvkey', 'iid']] = meta['sec'].str.split('_', n=1, expand=True)
     _write_delistings(meta, src)

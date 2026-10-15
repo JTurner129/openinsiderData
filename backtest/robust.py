@@ -132,9 +132,43 @@ def stress_tests(F, market, scorer, rf, factors):
     return pd.DataFrame(rows), pd.DataFrame(boot_rows), pd.DataFrame(hedge_rows), curves
 
 
+def _universe_matrices(tickers, cal):
+    """Close, daily return, entry-day return, daily spread estimate and last index for every stock,
+    as compact float32 arrays (trading days x stocks), so the whole universe fits in memory."""
+    from .filters import corwin_schultz
+    T, N = len(cal), len(tickers)
+    C = np.full((T, N), np.nan, dtype=np.float32)
+    R = np.zeros((T, N), dtype=np.float32)
+    I = np.zeros((T, N), dtype=np.float32)
+    S = np.full((T, N), np.nan, dtype=np.float32)
+    last = np.full(N, -1, dtype=np.int32)
+    idx = pd.DatetimeIndex(cal)
+    for j, t in enumerate(tickers):
+        px = load_price(t)
+        if px is None or px.empty:
+            continue
+        px = px.dropna(subset=['adj_close'])
+        close = px['adj_close'].reindex(idx)
+        has = close.notna().values
+        if not has.any():
+            continue
+        C[:, j] = close.values
+        R[:, j] = (close / px['adj_close'].shift(1).reindex(idx) - 1).fillna(0.0).values
+        opn = px['adj_open'].where(px['adj_open'] > 0, px['adj_close'])
+        I[:, j] = (px['adj_close'] / opn - 1).reindex(idx).fillna(0.0).values
+        if 'adj_high' in px:
+            S[:, j] = pd.Series(corwin_schultz(px['adj_high'].values, px['adj_low'].values, px['adj_close'].values),
+                                index=px.index).reindex(idx).values
+        last[j] = int(np.flatnonzero(has)[-1])
+        if (j + 1) % 5000 == 0:
+            LOG.info(f'  universe: loaded {j + 1:,}/{N:,}')
+    return C, R, I, S, last
+
+
 def control_group(F, market, scorer, rf, factors):
     """Stocks that crashed just as much on the same day but had no insider cluster."""
     cal = market.cal
+    T = len(cal)
     base = F[F['screen'] == 'cluster3'].reset_index(drop=True)
     sig = base[base['ret_prior_6m'] <= DROP_LEVEL]
     cfg = load_config()
@@ -146,52 +180,77 @@ def control_group(F, market, scorer, rf, factors):
     else:
         tickers = sorted(p.stem for p in PRICE_CACHE.glob('*.parquet'))
         tickers = [t for t in tickers if t not in ('SPY', 'IWM', 'IWC')]
-    closes = {}
-    for t in tickers:
-        s = market.get(t)
-        if s is not None:
-            closes[t] = s
-    LOG.info(f"control: {len(closes):,} tickers in the price universe")
-    # Tickers with any cluster-buy signal: excluded within +/- 6 months of it
+    C, R, I, S, last = _universe_matrices(tickers, cal)
+    col = {t: j for j, t in enumerate(tickers)}
+    LOG.info(f"control: {len(tickers):,} stocks in the price universe")
+    # Stocks with any cluster-buy signal are excluded within +/- 6 months of it
     cl = F[F['screen'] == 'cluster3'][['price_ticker', 'signal_date']].dropna()
     cl['price_ticker'] = cl['price_ticker'].map(lambda t: t if str(t).startswith('CS_') else yahoo_symbol(t))
-    near = {t: g['signal_date'].values for t, g in cl.groupby('price_ticker')}
-    rows = []
-    for _, t in sig.iterrows():
-        m = int(np.searchsorted(cal, np.datetime64(t['entry_date']), 'left'))
-        if m - 1 - DROP_LOOKBACK < 0:
-            continue
-        for tk, s in closes.items():
-            c0, c1 = s['close'][m - 1 - DROP_LOOKBACK], s['close'][m - 1]
-            if not (np.isfinite(c0) and np.isfinite(c1) and c0 > 0) or c1 / c0 - 1 > DROP_LEVEL:
-                continue
-            if not s['has'][m]:
-                continue
-            d = near.get(tk)
-            if d is not None and (np.abs((d - np.datetime64(t['entry_date'])).astype('timedelta64[D]').astype(int)) <= 182).any():
-                continue
-            sp = np.nanmedian(s['spread'][max(0, m - 20):m])
-            rows.append({'price_ticker': tk, 'entry_date': t['entry_date'], 'signal_date': t['signal_date'],
-                         'spread_est': max(sp if np.isfinite(sp) else 0.01, 0.0001), 'matched_to': t['price_ticker']})
-    ctrl = pd.DataFrame(rows).drop_duplicates(['price_ticker', 'entry_date'])
-    # Weight so each signal date's control group counts as much as one strategy position
-    ctrl['w'] = 1.0 / ctrl.groupby('entry_date')['price_ticker'].transform('count')
-    LOG.info(f"control: {len(ctrl):,} control positions for {sig['entry_date'].nunique():,} entry dates")
+    cl = cl[cl['price_ticker'].isin(col)]
+    cl_col = cl['price_ticker'].map(col).values
+    cl_day = cl['signal_date'].values.astype('datetime64[D]')
+
     out, curves = [], {}
+    n_pos = {}
     for h, hd in HOLDS.items():
-        eng_c = SubsetEngine(ctrl, market, hd, ctrl['spread_est'].values)
+        num_b, den_b = np.zeros(T), np.zeros(T)      # one basket per entry date, equal weight
+        num_s, den_s = np.zeros(T), np.zeros(T)      # every control stock equal
+        positions = 0
+        for m in sorted({int(np.searchsorted(cal, np.datetime64(d), 'left')) for d in sig['entry_date']}):
+            if m - 1 - DROP_LOOKBACK < 0 or m >= T:
+                continue
+            c0, c1 = C[m - 1 - DROP_LOOKBACK], C[m - 1]
+            with np.errstate(invalid='ignore', divide='ignore'):
+                ok = np.isfinite(c0) & np.isfinite(c1) & (c0 > 0) & (c1 / c0 - 1 <= DROP_LEVEL) & np.isfinite(C[m])
+            near = cl_col[np.abs((cl_day - np.datetime64(cal[m], 'D')).astype(int)) <= 182]
+            ok[near] = False
+            js = np.flatnonzero(ok)
+            if not len(js):
+                continue
+            positions += len(js)
+            end = min(m + hd, T - 1)
+            L = end - m + 1
+            r = R[m:end + 1, js].astype(np.float64).copy()
+            r[0] = I[m, js]
+            beyond = np.arange(m, end + 1)[:, None] > last[js][None, :]
+            r[beyond] = 0.0                          # after a stock's last day: cash
+            sp = np.nanmedian(S[max(0, m - 20):m, js], axis=0) if m > 0 else np.full(len(js), np.nan)
+            cost = np.maximum(np.where(np.isfinite(sp), sp, 0.01), 0.0001)
+            r[0] = (1 + r[0]) * (1 - cost / 2) - 1
+            exit_row = np.minimum(last[js], end) - m
+            exit_row = np.clip(exit_row, 0, L - 1)
+            r[exit_row, np.arange(len(js))] = (1 + r[exit_row, np.arange(len(js))]) * (1 - cost / 2) - 1
+            v = np.vstack([np.ones((1, len(js))), np.cumprod(1 + r, axis=0)[:-1]])   # value at start of day
+            num_s[m:end + 1] += (v * r).sum(axis=1)
+            den_s[m:end + 1] += v.sum(axis=1)
+            V = np.cumprod(1 + (v * r).sum(axis=1) / v.sum(axis=1))                   # basket value path
+            vb = np.concatenate([[1.0], V[:-1]])
+            rb = V / vb - 1
+            num_b[m:end + 1] += vb * rb
+            den_b[m:end + 1] += vb
+        n_pos[h] = positions
         eng_s = SubsetEngine(sig.reset_index(drop=True), market, hd, sig['spread_est'].values)
-        for label, eng, w in (('Big-drop clusters (insiders buying)', eng_s, np.ones(len(sig))),
-                              ('Control: same-day ≥50% drops, no insider cluster (equal weight per date)', eng_c, ctrl['w'].values),
-                              ('Control: same-day ≥50% drops, no insider cluster (every stock equal)', eng_c, np.ones(len(ctrl)))):
-            p = eng.returns(w, rf)
-            r = {'hold': h, 'portfolio': label, 'positions': int(len(w))}
+        idx = pd.DatetimeIndex(cal)
+
+        def series(num, den):
+            act = den > 0
+            first = np.argmax(act)
+            lastd = len(act) - 1 - np.argmax(act[::-1])
+            return pd.Series(np.where(act, num / np.where(act, den, 1), rf), index=idx).iloc[first:lastd + 1]
+
+        for label, p in (('Big-drop clusters (insiders buying)', eng_s.returns(np.ones(len(sig)), rf)),
+                         ('Control: same-day ≥50% drops, no insider cluster (equal weight per date)', series(num_b, den_b)),
+                         ('Control: same-day ≥50% drops, no insider cluster (every stock equal)', series(num_s, den_s))):
+            r = {'hold': h, 'portfolio': label,
+                 'positions': int(len(sig)) if label.startswith('Big-drop') else positions}
             for lab, sl in (('full', slice(None)), ('2016+', slice('2016-01-01', None))):
                 a, t, _ = scorer.score(p.loc[sl])
                 r[f'{lab} alpha'], r[f'{lab} t'] = a, t
             r.update(perf(p, factors['RF']))
             out.append(r)
             curves[f'{label}|{h}'] = p
+    LOG.info(f"control: {n_pos} control positions for {sig['entry_date'].nunique():,} entry dates")
+    ctrl = pd.DataFrame({'hold': list(n_pos), 'control_positions': list(n_pos.values())})
     return pd.DataFrame(out), ctrl, curves
 
 
