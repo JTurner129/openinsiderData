@@ -88,13 +88,27 @@ def events(cfg):
     from .compustat import CS_CACHE
     meta = pd.read_parquet(CS_CACHE / '_securities.parquet')
     meta['gvkey'] = meta['gvkey'].astype(str)
-    sec = meta.sort_values('median_dollar_volume', ascending=False).drop_duplicates('gvkey').set_index('gvkey')['sec']
+    meta['first_date'] = pd.to_datetime(meta['first_date'])
+    meta['last_date'] = pd.to_datetime(meta['last_date'])
+    by = {k: g for k, g in meta.groupby('gvkey')}
     m = m.merge(co.dropna(), on='cik')
-    m['price_ticker'] = 'CS_' + m['gvkey'].map(sec).astype(str)
-    m = m[m['gvkey'].isin(sec.index)]
     spy = load_price('SPY')
     idx = pd.DatetimeIndex(spy.index.values)
     m['entry_date'] = [next_day(idx, d, 21) for d in m['filing_date']]
+    m = m.dropna(subset=['entry_date'])
+    # Bug fix (no rule change): use the share class actually trading at entry - the newest one if several -
+    # never the old, cancelled pre-bankruptcy stock (which had stopped trading before entry).
+    pick = []
+    for _, r in m.iterrows():
+        g = by.get(r['gvkey'])
+        sec = None
+        if g is not None:
+            live = g[(g['first_date'] <= r['entry_date'] - pd.Timedelta(days=28)) & (g['last_date'] >= r['entry_date'])]
+            if len(live):
+                sec = 'CS_' + str(live.sort_values('first_date').iloc[-1]['sec'])
+        pick.append(sec)
+    m['price_ticker'] = pick
+    m = m.dropna(subset=['price_ticker'])
     return m.dropna(subset=['entry_date']).drop_duplicates(['gvkey', 'bk_date']).reset_index(drop=True)
 
 
