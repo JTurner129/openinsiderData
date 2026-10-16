@@ -93,7 +93,9 @@ def fact_sheet(row, co, q, pc, si):
             ttm = g.tail(4)
             rev, ni = ttm['saleq'].sum(), ttm['niq'].sum()
             prev = g.iloc[-8:-4]['saleq'].sum() if len(g) >= 8 else np.nan
-            debt = (last['dlttq'] or 0) + (last['dlcq'] or 0)
+            # pd.NA cannot be tested for truth; treat it like None (same result as before for every other value)
+            nz = lambda x: 0 if x is None or x is pd.NA else (x or 0)
+            debt = nz(last['dlttq']) + nz(last['dlcq'])
             lines.append(f"Trailing 12-month revenue ${rev:,.0f}M ({(rev / prev - 1):+.0%} vs prior year); net income ${ni:,.0f}M"
                          if prev and np.isfinite(prev) and prev > 0 else f"Trailing 12-month revenue ${rev:,.0f}M; net income ${ni:,.0f}M")
             lines.append(f"Cash ${last['cheq']:,.0f}M; debt ${debt:,.0f}M; book equity ${last['ceqq']:,.0f}M; "
