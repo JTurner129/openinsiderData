@@ -59,13 +59,16 @@ def month_file(p, titles):
     pat = OUT / '_patterns.txt'
     url = f'{BASE}/{p.year}/{p}/pageviews-{p.strftime("%Y%m")}-user.bz2'
     cmd = (f"curl -sS --retry 5 --retry-delay 20 -A '{UA}' '{url}' | bzip2 -dc | "
-           f"grep -a -F -f '{pat}' || true")
-    for attempt in range(3):
+           f"grep -a -F -f '{pat}'")
+    # every stage must succeed: a dropped connection truncates the dump and would save a partial month
+    for attempt in range(5):
         res = subprocess.run(['bash', '-c', 'set -o pipefail; ' + cmd], capture_output=True, text=True)
-        if res.stdout:
+        if res.returncode == 0 and res.stdout:
             break
-        LOG.warning(f'wiki {p}: empty result (attempt {attempt + 1}): {res.stderr[:200]}')
+        LOG.warning(f'wiki {p}: failed or truncated (attempt {attempt + 1}, exit {res.returncode}): {res.stderr[:200]}')
         time.sleep(60)
+    else:
+        raise RuntimeError(f'wiki {p}: could not download a complete dump')
     rows = []
     for line in res.stdout.splitlines():
         parts = line.split(' ')
@@ -86,8 +89,13 @@ def download(parallel=2):
     todo = months()
     LOG.info(f'wiki: {len(titles):,} articles, {len(todo)} monthly dumps')
     t0 = time.time()
+    def safe(p):
+        try:
+            return month_file(p, titles)
+        except RuntimeError as e:
+            return p, f'FAILED ({e}); re-run download() to retry'
     with ThreadPoolExecutor(parallel) as ex:
-        for i, (p, msg) in enumerate(ex.map(lambda p: month_file(p, titles), todo)):
+        for i, (p, msg) in enumerate(ex.map(safe, todo)):
             el = (time.time() - t0) / 3600
             LOG.info(f'wiki {p}: {msg} ({i + 1}/{len(todo)}, {el:.1f} h elapsed)')
     LOG.info('wiki: download done')
