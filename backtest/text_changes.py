@@ -246,3 +246,73 @@ def load_scores():
 
 if __name__ == '__main__':
     download()
+
+
+def test(cfg=None):
+    """Lazy Prices test exactly as in the module docstring. Returns are gross of trading costs (the
+    pre-registered rules name none); the top quintile's monthly turnover is reported so costs can be judged."""
+    import numpy as np
+    import statsmodels.api as sm
+    from .common import RESULTS, load_config
+    from .compustat import wrds_dir
+    from .prices import load_price
+    cfg = cfg or load_config()
+    S = load_scores()
+    S['filing_date'] = pd.to_datetime(S['filing_date'])
+    co = pd.read_parquet(wrds_dir(cfg) / 'compustat_company.parquet', columns=['gvkey', 'cik'])
+    co['cik'] = pd.to_numeric(co['cik'], errors='coerce')
+    co['gvkey'] = co['gvkey'].astype(str)
+    S = S.merge(co.dropna(), on='cik')
+    panel = pd.read_parquet(CACHE / 'cs_monthly_panel.parquet', columns=['sec', 'month_end', 'price', 'adv20', 'gvkey'])
+    rets = pd.read_parquet(CACHE / 'cs_monthly_returns.parquet', columns=['sec', 'month_end', 'ret_next'])
+    panel = panel.merge(rets, on=['sec', 'month_end'])
+    panel['gvkey'] = panel['gvkey'].astype(str)
+    panel['month_end'] = pd.to_datetime(panel['month_end'])
+    panel = panel[(panel['price'] >= 1) & (panel['adv20'] >= 100_000)].dropna(subset=['ret_next'])
+    panel = panel.sort_values('adv20').drop_duplicates(['gvkey', 'month_end'], keep='last')
+    F = pd.read_parquet(CACHE / 'ff5_umd_daily_full.parquet')
+    Fm = (1 + F).resample('ME').prod() - 1
+    Fm.index = Fm.index.to_period('M')
+    spy = load_price('SPY')['adj_close'].resample('ME').last().pct_change()
+    spy.index = spy.index.to_period('M')
+    out, monthly = [], {}
+    for score in ('sim_cosine', 'rf_sim_cosine'):
+        s = S.dropna(subset=[score]).sort_values('filing_date')[['gvkey', 'filing_date', score]]
+        rows, prev = [], set()
+        for me, g in panel.groupby('month_end'):
+            w = s[(s['filing_date'] <= me) & (s['filing_date'] > me - pd.DateOffset(months=3))]
+            w = w.drop_duplicates('gvkey', keep='last')
+            x = g.merge(w, on='gvkey')
+            if len(x) < 50:
+                continue
+            x['q'] = pd.qcut(x[score].rank(method='first'), 5, labels=False) + 1
+            r = x.groupby('q')['ret_next'].mean()
+            top = set(x.loc[x['q'] == 5, 'sec'])
+            rows.append({'month': me.to_period('M') + 1, **{f'Q{int(k)}': v for k, v in r.items()}, 'n': len(x),
+                         'Q5 turnover': 1 - len(top & prev) / max(len(top), 1)})
+            prev = top
+        Q = pd.DataFrame(rows).set_index('month')
+        Q['Q5-Q1'] = Q['Q5'] - Q['Q1']
+        monthly[score] = Q
+        for lab, a, b in (('all', None, None), ('2016+', '2016-01', None), ('2005–2015', None, '2015-12')):
+            q = Q.loc[a:b]
+            for col in ('Q1', 'Q5', 'Q5-Q1'):
+                x = q[col].dropna()
+                f = Fm.reindex(x.index).dropna()
+                x = x.reindex(f.index)
+                y = x - (f['RF'] if col != 'Q5-Q1' else 0)
+                res = sm.OLS(y, sm.add_constant(f[['Mkt-RF', 'SMB', 'HML', 'RMW', 'CMA', 'UMD']])).fit(cov_type='HAC', cov_kwds={'maxlags': 6})
+                sp = spy.reindex(x.index)
+                cagr = (1 + x).prod() ** (12 / len(x)) - 1 if col != 'Q5-Q1' else np.nan
+                out.append({'score': score, 'period': lab, 'portfolio': col, 'months': len(x),
+                            'avg monthly': x.mean(), 'CAGR (gross)': cagr,
+                            'SPY CAGR': (1 + sp.dropna()).prod() ** (12 / sp.notna().sum()) - 1 if col != 'Q5-Q1' else np.nan,
+                            'alpha/yr': res.params['const'] * 12, 'alpha t': res.tvalues['const'],
+                            'Q5 monthly turnover': q['Q5 turnover'].mean(), 'avg stocks': q['n'].mean()})
+        LOG.info(f'text test: {score} done')
+    R = pd.DataFrame(out)
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    R.to_csv(RESULTS / 'text_changes.csv', index=False)
+    pd.concat(monthly, names=['score']).to_csv(RESULTS / 'text_changes_quintiles_monthly.csv')
+    LOG.info('text test: done')
+    return R
