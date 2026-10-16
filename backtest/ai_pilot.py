@@ -89,6 +89,10 @@ def fact_sheet(row, co, q, pc, si):
     if g is not None:
         g = g[g['public'] <= d].tail(8)
         if len(g):
+            # nullable columns: turn pd.NA into NaN so tests and formatting behave as for every earlier row
+            num = [c for c in g.columns if c != 'public' and pd.api.types.is_numeric_dtype(g[c])]
+            g = g.copy()
+            g[num] = g[num].astype('float64')
             last = g.iloc[-1]
             ttm = g.tail(4)
             rev, ni = ttm['saleq'].sum(), ttm['niq'].sum()
