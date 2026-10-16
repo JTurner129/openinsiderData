@@ -82,11 +82,10 @@ def run(cfg=None):
                 ret = float((val * r).sum() / val.sum())
                 if i == 0:
                     ret -= to * 2 * SIDE
-                port[k].append((m + pd.offsets.MonthEnd(1), ret))
+                port[k].append((pd.Timestamp(m).to_period('M') + 1, ret))
                 val = val * (1 + r)
             prev[k] = val / val.sum()
     P = pd.DataFrame({k: pd.Series(dict(v)) for k, v in port.items()}).sort_index()
-    P.index = pd.to_datetime(P.index).to_period('M')
     for t in ('SPY', 'RSP'):
         s = load_price(t)['adj_close'].resample('ME').last().pct_change()
         s.index = s.index.to_period('M')
