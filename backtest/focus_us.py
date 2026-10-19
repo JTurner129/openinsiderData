@@ -110,7 +110,7 @@ def run(cfg=None, sdc_xlsx='eikon/sdc_spinoffs_2026-10-19.xlsx', sic_xlsx='eikon
         r = {'period': per, 'matched': len(x), 'focus n': len(f), 'focus mean': f['ex'].mean(), 'focus median': f['ex'].median(),
              'focus share>0': (f['ex'] > 0).mean(), 'same n': len(s), 'same mean': s['ex'].mean(), 'same median': s['ex'].median(),
              'same share>0': (s['ex'] > 0).mean(), 'difference': f['ex'].mean() - s['ex'].mean(),
-             't (difference)': cl(f['ex'] - s['ex'].mean(), f['month'])}
+             't (difference)': two_sample_t(f, s, 'ex')}
         if per == 'all':
             r.update({('focus ' + k): v for k, v in book(f).items()})
             r.update({('same ' + k): v for k, v in book(s).items()})
@@ -125,3 +125,15 @@ def run(cfg=None, sdc_xlsx='eikon/sdc_spinoffs_2026-10-19.xlsx', sic_xlsx='eikon
     E.to_csv(RESULTS / 'focus_us_events.csv', index=False)
     LOG.info('focus_us: done')
     return R
+
+
+def two_sample_t(f, s, col):
+    """Bug fix (no rule change): the difference's t must account for noise in BOTH groups. Earlier code treated
+    the comparison group's mean as fixed, which overstated t. OLS of excess on a group dummy, errors clustered by
+    entry month."""
+    import statsmodels.formula.api as smf
+    d = pd.concat([f.assign(grp=1), s.assign(grp=0)]).dropna(subset=[col])
+    if d['grp'].nunique() < 2 or len(d) < 10:
+        return np.nan
+    r = smf.ols(f'{col} ~ grp', d).fit(cov_type='cluster', cov_kwds={'groups': pd.factorize(d['month'])[0]})
+    return r.tvalues['grp']

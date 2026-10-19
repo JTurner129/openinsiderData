@@ -228,7 +228,7 @@ def focus_test(trades_csv, sdc_xlsx='eikon/sdc_spinoffs_2026-10-19.xlsx', sic_xl
     for name, sel in (('US', T['region'] == 'US'), ('non-US', T['region'] != 'US')):
         x = T[sel & T['known']]
         f, s = x[x['focus']], x[~x['focus']]
-        d_t = cl(f['excess_global'] - s['excess_global'].mean(), f['month'])
+        d_t = two_sample_t(f, s, 'excess_global')
         diff = f['excess_global'].mean() - s['excess_global'].mean()
         rows.append({'sample': name, 'with SIC both sides': len(x), 'focus-increasing n': len(f),
                      'focus-increasing mean excess': f['excess_global'].mean(), 'focus median': f['excess_global'].median(),
@@ -239,3 +239,15 @@ def focus_test(trades_csv, sdc_xlsx='eikon/sdc_spinoffs_2026-10-19.xlsx', sic_xl
     R['adopted (pre-written)'] = ok_all
     R.to_csv(RESULTS / 'intl_spinoff_focus.csv', index=False)
     return R
+
+
+def two_sample_t(f, s, col):
+    """Bug fix (no rule change): the difference's t must account for noise in BOTH groups. Earlier code treated
+    the comparison group's mean as fixed, which overstated t. OLS of excess on a group dummy, errors clustered by
+    entry month."""
+    import statsmodels.formula.api as smf
+    d = pd.concat([f.assign(grp=1), s.assign(grp=0)]).dropna(subset=[col])
+    if d['grp'].nunique() < 2 or len(d) < 10:
+        return np.nan
+    r = smf.ols(f'{col} ~ grp', d).fit(cov_type='cluster', cov_kwds={'groups': pd.factorize(d['month'])[0]})
+    return r.tvalues['grp']
