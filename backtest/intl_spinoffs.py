@@ -198,3 +198,44 @@ def run(paths, events_csv='eikon/isin_list.csv', sdc_xlsx='eikon/sdc_spinoffs_20
     P.to_csv(RESULTS / 'intl_spinoff_portfolio_weekly.csv')
     LOG.info(f'intl: {len(T)} trades ({len(nu)} non-US); done')
     return R, T, P
+
+
+def focus_test(trades_csv, sdc_xlsx='eikon/sdc_spinoffs_2026-10-19.xlsx', sic_xlsx='eikon/sdc_sic_2026-10-19.xlsx',
+               isin_csv='eikon/isin_list.csv'):
+    """Amendment (written before running): the "different industry from parent" test, now possible with a second
+    export holding SIC descriptions for the target (column 20) and its immediate parent (column 21), matched by
+    deal id (column 0). Focus-increasing = target primary SIC (4-digit description) differs from the parent's.
+    Reported separately for US and non-US trades of Phase 31: per-trade excess vs global benchmark, with/without,
+    difference and month-clustered t. Counts only if focus-increasing beats same-industry by >= 5 points per
+    trade with t >= 2 in BOTH US and non-US."""
+    T = pd.read_csv(trades_csv)
+    a = pd.read_excel(sdc_xlsx, header=None)[[0, 13]].rename(columns={0: 'deal', 13: 'SEDOL'})
+    b = pd.read_excel(sic_xlsx, header=None)[[0, 20, 21]].rename(columns={0: 'deal', 20: 'sic_target', 21: 'sic_parent'})
+    m = a.merge(b, on='deal').dropna(subset=['SEDOL'])
+    iso = pd.read_csv(isin_csv)[['SEDOL', 'ISIN']]
+    m = m.merge(iso, on='SEDOL').drop_duplicates('ISIN')
+    T = T.merge(m[['ISIN', 'sic_target', 'sic_parent']], on='ISIN', how='left')
+    T['focus'] = T['sic_target'].notna() & T['sic_parent'].notna() & (T['sic_target'] != T['sic_parent'])
+    T['known'] = T['sic_target'].notna() & T['sic_parent'].notna()
+
+    def cl(x, mo):
+        x = pd.Series(np.asarray(x, float)).reset_index(drop=True)
+        mo = pd.Series(np.asarray(mo)).reset_index(drop=True)
+        g = (x - x.mean()).groupby(mo).sum()
+        return x.mean() / (np.sqrt((g ** 2).sum()) / len(x)) if len(x) > 5 else np.nan
+    rows = []
+    ok_all = True
+    for name, sel in (('US', T['region'] == 'US'), ('non-US', T['region'] != 'US')):
+        x = T[sel & T['known']]
+        f, s = x[x['focus']], x[~x['focus']]
+        d_t = cl(f['excess_global'] - s['excess_global'].mean(), f['month'])
+        diff = f['excess_global'].mean() - s['excess_global'].mean()
+        rows.append({'sample': name, 'with SIC both sides': len(x), 'focus-increasing n': len(f),
+                     'focus-increasing mean excess': f['excess_global'].mean(), 'focus median': f['excess_global'].median(),
+                     'same-industry n': len(s), 'same-industry mean excess': s['excess_global'].mean(),
+                     'same median': s['excess_global'].median(), 'difference': diff, 'clustered t (diff)': d_t})
+        ok_all &= bool(diff >= 0.05 and d_t >= 2)
+    R = pd.DataFrame(rows)
+    R['adopted (pre-written)'] = ok_all
+    R.to_csv(RESULTS / 'intl_spinoff_focus.csv', index=False)
+    return R
