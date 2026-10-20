@@ -79,10 +79,11 @@ and write again.
 
 Read `/tmp/spin/out/alerts.json`.
 
-- If `noteworthy` is true, first send the phone alert by Telegram (the bot token and chat id are given
-  in the scheduled task's prompt; never write them to a file):
-  `curl -s "https://api.telegram.org/bot<TOKEN>/sendMessage" --data-urlencode "chat_id=<CHAT_ID>" --data-urlencode "text=<push text>"`
-  and check the reply contains `"ok":true`.
+- If `noteworthy` is true, first send the phone alert by Pushover (main channel) and Telegram (backup).
+  Keys are given in the scheduled task's prompt; never write them to a file:
+  `curl -s https://api.pushover.net/1/messages.json --form-string "token=<PUSHOVER_TOKEN>" --form-string "user=<PUSHOVER_USER>" --form-string "title=Spin-off tracker" --form-string "priority=1" --form-string "message=<push text>"`
+  (check the reply has `"status":1`), then
+  `curl -s "https://api.telegram.org/bot<TOKEN>/sendMessage" --data-urlencode "chat_id=<CHAT_ID>" --data-urlencode "text=<push text>"`.
 - If `noteworthy` is true: call PushNotification with the `push` text, then finish with a short message:
   the `lines`, one per line, and the tracker link.
 - Otherwise finish with one line: the `push` text (it can say the scan was incomplete), plus anything
@@ -91,5 +92,5 @@ Read `/tmp/spin/out/alerts.json`.
 ## 8. If something failed
 
 Still try to tell the page: write `market/status` (read its version first with ArtifactData `get`) with
-`scan_ok: false` and the error in `errors`, keeping the other fields. Then send "Spin-off tracker check failed: <short reason>" by Telegram as in step 7 and call PushNotification with
+`scan_ok: false` and the error in `errors`, keeping the other fields. Then send "Spin-off tracker check failed: <short reason>" by Pushover and Telegram as in step 7 and call PushNotification with
 the same text and finish with what failed and what you tried.
