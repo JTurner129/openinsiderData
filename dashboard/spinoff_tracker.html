@@ -100,7 +100,6 @@ main.wrap{padding-block:16px 56px}
 .chip--plain{background:var(--grid);color:var(--fg2)}
 .tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:4px;background:var(--grid);color:var(--fg2);white-space:nowrap}
 .tag--warn{background:var(--warn-soft);color:var(--warn);white-space:normal}
-.depdone{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
 
 /* status line + banners */
 .statusline{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;font-size:13px;color:var(--fg2)}
@@ -446,8 +445,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       <div>
         <div class="panel block">
           <h2 class="sec">Add money</h2>
-          <div class="btns" id="depQuickRow"><button type="button" class="btn btn--primary" id="depQuick">Add this month's £1,666.66</button></div>
-          <div class="depdone" id="depDoneRow" hidden><p class="small fg2" id="depDone" style="margin:0"></p><button type="button" class="btn" id="depAnother" aria-controls="depForm" aria-expanded="false">Add another deposit</button></div>
+          <p class="small fg2" style="margin:0">Add any amount, whenever you put money in. It sits in the index fund until a spin-off needs it.</p>
           <form class="form" id="depForm" novalidate>
             <fieldset class="fs">
               <legend>Type</legend>
@@ -458,10 +456,10 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
             </fieldset>
             <div class="frow">
               <div class="field"><label for="depDate">Date</label><input type="date" id="depDate" name="depDate" min="2000-01-01" required><span class="err" id="depDateErr" hidden></span></div>
-              <div class="field"><label for="depAmount">Amount (£)</label><input type="text" inputmode="decimal" id="depAmount" name="depAmount" autocomplete="off" placeholder="1,666.66"><span class="err" id="depAmountErr" hidden></span></div>
+              <div class="field"><label for="depAmount">Amount (£)</label><input type="text" inputmode="decimal" id="depAmount" name="depAmount" autocomplete="off" placeholder="e.g. 500"><span class="err" id="depAmountErr" hidden></span></div>
             </div>
             <div class="field"><label for="depNote">Note (optional)</label><input type="text" id="depNote" name="depNote" maxlength="200" autocomplete="off"></div>
-            <div class="btns"><button type="submit" class="btn" id="depSubmit">Add to records</button></div>
+            <div class="btns"><button type="submit" class="btn btn--primary" id="depSubmit">Add to records</button></div>
             <p class="small muted" id="depStartHint" style="margin:0">Starting out? Log the money already in your account as your first deposit, dated the day you opened the tracker.</p>
           </form>
         </div>
@@ -501,7 +499,6 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
               </div>
               <div class="field field--inset" id="setSliceField" hidden><label for="setSlice">Each spin-off gets 1 out of</label><input type="number" id="setSlice" min="1" step="1" inputmode="numeric"><span class="hint" id="setSliceHint">Whole number, 4 to 40</span><span class="err" id="setSliceErr" hidden></span></div>
             </fieldset>
-            <div class="field"><label for="setMonthly">Monthly deposit (£)</label><input type="text" inputmode="decimal" id="setMonthly" autocomplete="off"><span class="err" id="setMonthlyErr" hidden></span></div>
             <div class="btns"><button type="submit" class="btn" id="setSave">Save settings</button><span class="small muted" id="setMsg"></span></div>
           </form>
           <div class="block">
@@ -524,7 +521,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
             <li>Buy at the open on US trading day 21, if over the previous 20 trading days it closed at $1 or more and traded at least $100,000 a day on average. You have 5 trading days to buy. After that it counts as missed.</li>
             <li>Each buy gets <span id="helpSlice">1/8</span> of your whole account (your risk level in Settings). Pay for it by selling the index fund. If the fund doesn't cover it, sell all of the fund and trim your other spin-offs in proportion to their value.</li>
             <li>Sell at the open 252 US trading days (about 12 months) after the day you bought. No other exits.</li>
-            <li>Everything else sits in the index fund, including your monthly deposits and sale proceeds.</li>
+            <li>Everything else sits in the index fund, including the money you add and sale proceeds.</li>
           </ol>
           <h3>What the page does</h3>
           <p>A scheduled check scans SEC filings and prices <span id="helpSchedule">every weekday morning</span> and writes the results here. This page turns them into today's actions and compares your account with putting the same deposits into an S&amp;P 500 or Nasdaq-100 fund. It counts every pound that isn't in a spin-off as held in your index fund. If you choose EQQQ, reinvest its dividends so the numbers match.</p>
@@ -1539,7 +1536,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     data: { market: {}, prices: {}, checks: {}, trades: {}, deposits: {}, settings: {} },
     loaded: {}, subErr: {},
     tab: 'today', openKeys: {}, pendingDelete: null, showAll: {},
-    check: { state: 'idle', msg: '' }, D: null, dirty: true, settingsShadow: null, showDepForm: false, clock: ''
+    check: { state: 'idle', msg: '' }, D: null, dirty: true, settingsShadow: null, clock: ''
   };
 
   /* ---------- tiny DOM helpers (all untrusted text goes through textContent) ---------- */
@@ -1764,7 +1761,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   }
 
   function setFormsDisabled(dis) {
-    ['depQuick', 'depSubmit', 'recAddTrade', 'setSave', 'tradeSubmit'].forEach(function (id) { var b = $(id); if (b) b.disabled = !!dis; });
+    ['depSubmit', 'recAddTrade', 'setSave', 'tradeSubmit'].forEach(function (id) { var b = $(id); if (b) b.disabled = !!dis; });
   }
 
   function renderGlobal(D) {
@@ -2154,10 +2151,9 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
         h('button', { type: 'button', class: 'linkbtn small', onclick: function () { setTab('records'); setTimeout(function () { var el = $('settingsPanel'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }); }, 30); } }, 'Risk level: ' + risk.name + ' (1/' + risk.slice + ' each)')),
       h('div', { class: 'meter', role: 'img', 'aria-label': 'Spin-offs ' + pct + ' of the account' }, h('span', { style: 'width:' + ((share || 0) * 100).toFixed(1) + '%' })),
       h('p', { class: 'small fg2', style: 'margin:0' }, parts.join(' · '))));
-    if (D.hasDeposits && !D.depositThisMonth) {
-      var mAmt = D.settings.monthly_deposit;
-      nodes.push(h('div', { class: 'remind' }, h('span', null, 'No deposit logged for ' + L.monthName(todayUK(), true) + ' yet.'),
-        h('button', { type: 'button', class: 'btn btn--small', disabled: !canWrite(), onclick: quickDeposit }, 'Log ' + money(mAmt))));
+    if (D.hasDeposits) {
+      nodes.push(h('div', { class: 'remind' }, h('span', null, 'Put more money in?'),
+        h('button', { type: 'button', class: 'btn btn--small', disabled: !canWrite(), onclick: function () { setTab('records'); setTimeout(function () { $('depAmount').focus(); }, 30); } }, 'Add money')));
     }
     fill('todaySummary', h('div', { class: 'summary' }, nodes));
   }
@@ -2501,16 +2497,6 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
 
   /* ---------- RECORDS ---------- */
   function renderRecords(D) {
-    var mAmt = D.settings.monthly_deposit;
-    $('depQuick').textContent = 'Add this month’s ' + money(mAmt);
-    /* once this month's deposit is logged, a second tap would double it: say so instead, form on request */
-    var logged = D.depositThisMonth;
-    $('depQuickRow').hidden = logged;
-    $('depDoneRow').hidden = !logged;
-    if (logged) $('depDone').textContent = L.monthName(todayUK(), true) + '’s ' + money(D.depositThisMonthTotal) + ' is logged.';
-    $('depForm').hidden = logged && !S.showDepForm;
-    $('depAnother').setAttribute('aria-expanded', String(!$('depForm').hidden));
-    $('depAnother').hidden = !$('depForm').hidden;
     $('depStartHint').hidden = D.hasDeposits || D.allDeposits.length > 0;
     var dd = $('depDate'), td = $('tradeDate');
     dd.max = maxRecordDate(); td.max = maxRecordDate();
@@ -2605,7 +2591,6 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     $('setSlice').value = String(st.slice);
     $('setSliceField').hidden = risk.key !== 'custom';
     $('setSliceHint').textContent = risk.outside ? 'Whole number, 4 to 40. Your saved 1/' + st.slice + ' is outside that range; it stays as it is unless you change it.' : 'Whole number, 4 to 40';
-    $('setMonthly').value = st.monthly_deposit.toFixed(2);
   }
   function chosenSlice() {
     if ($('setRisk8').checked) return 8;
@@ -2634,8 +2619,6 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
         toast((kind === 'out' ? 'Withdrawal of ' : 'Deposit of ') + money(Math.abs(r.value.amount_gbp)) + ' saved.', { undo: function () { removeDoc('deposits', ref.id, 'the undo').catch(function () {}); } });
       }).catch(function () {}).then(function () { btn.disabled = !canWrite(); });
     });
-    $('depQuick').addEventListener('click', quickDeposit);
-    $('depAnother').addEventListener('click', function () { S.showDepForm = true; if (S.D) renderRecords(S.D); setTimeout(function () { $('depAmount').focus(); }, 20); });
     /* trade sheet */
     $('recAddTrade').addEventListener('click', function (e) { openTrade({}, e.currentTarget); });
     $('tradeCancel').addEventListener('click', closeTrade);
@@ -2683,21 +2666,19 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
         if (custom && id === 'setRiskCustom') { if (!$('setSlice').value) $('setSlice').value = String(S.D ? S.D.settings.slice : 8); setTimeout(function () { $('setSlice').focus(); try { $('setSlice').select(); } catch (e) {} }, 0); }
       });
     });
-    ['setFundVUAG', 'setFundEQQQ', 'setRisk8', 'setRisk27', 'setRiskCustom', 'setSlice', 'setMonthly'].forEach(function (id) { $(id).addEventListener('input', function () { settingsDirty = true; $('setMsg').textContent = 'Unsaved changes'; }); $(id).addEventListener('change', function () { settingsDirty = true; $('setMsg').textContent = 'Unsaved changes'; }); });
+    ['setFundVUAG', 'setFundEQQQ', 'setRisk8', 'setRisk27', 'setRiskCustom', 'setSlice'].forEach(function (id) { $(id).addEventListener('input', function () { settingsDirty = true; $('setMsg').textContent = 'Unsaved changes'; }); $(id).addEventListener('change', function () { settingsDirty = true; $('setMsg').textContent = 'Unsaved changes'; }); });
     $('setForm').addEventListener('submit', function (e) {
       e.preventDefault();
       if (!canWrite()) return;
-      var slice = chosenSlice(), monthly = L.parseAmount($('setMonthly').value);
+      var slice = chosenSlice();
       var bad = false;
       /* the form offers 4 to 40; a value already stored outside that (the engine takes any whole number from 1) is kept */
       var stored = S.D ? S.D.settings.slice : null;
       var sliceOk = L.validSlice(slice) || (slice === stored && L.validStoredSlice(slice));
       if (!sliceOk) { fieldErr('setSlice', 'Use a whole number from ' + L.SLICE_MIN + ' to ' + L.SLICE_MAX + '.'); bad = true; } else fieldErr('setSlice', '');
-      var monthlyP = Math.round(monthly * 100) / 100;
-      if (!(monthlyP >= 0.01)) { fieldErr('setMonthly', 'Enter an amount of at least £0.01.'); bad = true; } else fieldErr('setMonthly', '');
-      if (bad) { $(!sliceOk ? 'setSlice' : 'setMonthly').focus(); return; }
+      if (bad) { $('setSlice').focus(); return; }
       var fund = $('setFundEQQQ').checked ? 'EQQQ' : 'VUAG';
-      saveSettings(function (s) { s.index_fund = fund; s.slice = slice; s.monthly_deposit = monthlyP; }).then(function () {
+      saveSettings(function (s) { s.index_fund = fund; s.slice = slice; }).then(function () {
         settingsDirty = false; $('setMsg').textContent = 'Saved'; toast('Settings saved.');
       }).catch(function () {});
     });
@@ -2711,14 +2692,6 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
         msg.textContent = c === 'declined' ? 'Download cancelled.' : c === 'rate_limited' ? 'A download is already waiting for your answer.' : 'Downloads aren’t available here.';
       });
     });
-  }
-  function quickDeposit() {
-    if (!canWrite() || !S.D) return;
-    var amt = S.D.settings.monthly_deposit;
-    var v = { date: todayUK() > maxRecordDate() ? maxRecordDate() : todayUK(), amount_gbp: Math.round(amt * 100) / 100, note: 'Monthly deposit' };
-    addDeposit(v).then(function (ref) {
-      toast('Deposit of ' + money(v.amount_gbp) + ' saved for ' + L.fmtDate(v.date) + '.', { undo: function () { removeDoc('deposits', ref.id, 'the undo').catch(function () {}); } });
-    }).catch(function () {});
   }
 
   var sheetOpener = null;

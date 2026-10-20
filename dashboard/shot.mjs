@@ -271,13 +271,10 @@ try {
     const toastTxt = await pg.textContent('#toasts');
     if (/trading 212/.test(toastTxt || '')) problems.push('toast lowercases Trading 212: ' + toastTxt);
     await pg.screenshot({ path: join(OUT, 'interact_after_actions.png'), fullPage: true }); shots.push(join(OUT, 'interact_after_actions.png'));
-    // Records: October's deposit is already logged, so no quick-add button; another deposit via the form
+    // Records: the deposit form is always there and takes any amount
     await pg.click('#tab-records');
-    if (await pg.locator('#depQuick').isVisible()) problems.push('quick deposit offered although this month is logged');
-    const doneTxt = (await pg.textContent('#depDone')) || '';
-    if (!/October’s £1,666\.66 is logged/.test(doneTxt)) problems.push('deposit logged line wrong: ' + doneTxt);
-    if (await pg.locator('#depForm').isVisible()) problems.push('deposit form open although this month is logged');
-    await pg.click('#depAnother');
+    if (!(await pg.locator('#depForm').isVisible())) problems.push('deposit form not shown');
+    if (await pg.locator('#setMonthly').count()) problems.push('monthly deposit setting still shown');
     await pg.fill('#depAmount', '250');
     await pg.click('#depSubmit');
     await pg.waitForTimeout(120);
@@ -349,12 +346,13 @@ try {
     const o = await open(browser, { width: 390, scheme: 'light', fx: variant('firstrun'), label: 'firstrun' });
     await snapTabs(o, 'firstrun_390_light', ['today', 'performance', 'spinoffs', 'records']);
     if (!/No prices yet/.test(await o.pg.textContent('#mastMeta'))) problems.push('firstrun: masthead should say No prices yet');
-    // no deposits: the quick add is the main button
+    // no deposits: type any amount into the form
     await o.pg.click('#tab-records');
-    await o.pg.click('#depQuick');
+    await o.pg.fill('#depAmount', '3,217.45');
+    await o.pg.click('#depSubmit');
     await o.pg.waitForTimeout(120);
     const dw = (await o.pg.evaluate(() => window.__writes)).filter((x) => x[1] === 'deposits').pop();
-    if (!dw || dw[3].amount_gbp !== 1666.66 || dw[3].date !== '2026-10-20') problems.push('Quick deposit write wrong: ' + JSON.stringify(dw));
+    if (!dw || dw[3].amount_gbp !== 3217.45 || dw[3].date !== '2026-10-20') problems.push('First deposit write wrong: ' + JSON.stringify(dw));
     report(o); await o.ctx.close();
   }
   {
