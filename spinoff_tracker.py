@@ -56,6 +56,7 @@ SELL_GRACE = 10          # calendar days a model sell stays "SELL" before it bec
 DONE_PRICES = 60         # keep publishing a done spin-off's prices this many days after its model sell
 CAL_AHEAD = 600          # the calendar document reaches this many calendar days past today
 LOOKBACK = 400           # the engine starts at most this many days back (earlier if the user's data starts earlier)
+MODEL_START = date(2026, 10, 13)  # the page's model account starts 2026-10-20; keep fund prices from a week before
 EPS = 1e-6
 DUST = 0.005             # a sell that leaves less than 0.5% of the shares closes the position (typing rounding)
 MIN_DATE = date(2000, 1, 1)   # earlier trade / deposit dates are typing errors (e.g. year 26 -> 0026)
@@ -869,7 +870,7 @@ def scan(out, db=None, years=2, today=None, trigger_id=None, next_check=NEXT_CHE
         errors.append(f'Ignored until their date ({len(later)} dated after {today}): ' + ', '.join(later[:5])
                       + (', ...' if len(later) > 5 else ''))
     first_user = min([t['date'] for t in data['trades']] + [d['date'] for d in data['deposits']], default=None)
-    start = today - timedelta(days=LOOKBACK)
+    start = min(today - timedelta(days=LOOKBACK), MODEL_START)
     if first_user is not None:
         start = min(start, first_user - timedelta(days=7))
     start = max(start, today - timedelta(days=round(365.25 * MAX_YEARS_BACK)))

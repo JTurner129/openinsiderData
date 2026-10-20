@@ -249,6 +249,8 @@ details.steps li::marker{font-family:var(--mono);color:var(--muted)}
 .stats>div{background:var(--panel);padding:12px 14px;min-width:0}
 .stats .k{font-size:12px;color:var(--muted)}
 .stats .v{font:600 20px/1.3 var(--body)}
+.stats--3{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.stats .k .keyline{margin-right:6px}
 @media (min-width:640px){.stats{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .dtable{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
 .dtable th,.dtable td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
@@ -392,6 +394,10 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
           <div id="todaySummary"></div>
         </div>
         <div class="block">
+          <h2 class="sec">The strategy since 20 Oct</h2>
+          <div id="todayModel"></div>
+        </div>
+        <div class="block">
           <h2 class="sec">Coming up</h2>
           <div id="todayComing"></div>
         </div>
@@ -400,6 +406,18 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   </section>
 
   <section class="tabpanel" id="panel-performance" role="tabpanel" aria-labelledby="tab-performance" hidden>
+    <div class="panel block">
+      <div class="sec-row"><h2 class="sec">The strategy since 20 Oct 2026</h2><span class="small muted" id="modelAsOf"></span></div>
+      <p class="sub">A model account that follows the rules exactly from 20 Oct 2026, so you can see how the strategy does before you put money in. No deposits needed.</p>
+      <div id="modelHead"></div>
+      <ul class="legend" aria-label="Chart key">
+        <li><span class="keyline k-you"></span>Strategy</li>
+        <li><span class="keyline k-sp"></span>S&amp;P 500 fund</li>
+        <li><span class="keyline k-nq"></span>Nasdaq-100 fund</li>
+      </ul>
+      <div id="modelChart" class="chart" role="img" aria-label="Percentage return since 20 Oct 2026 for the strategy and the two index funds"></div>
+      <div id="modelTrades"></div>
+    </div>
     <div class="block">
       <h2 class="sec">How you're doing</h2>
       <p class="sub">Your account (You) against putting the same deposits, on the same dates, into one index fund and doing nothing else.</p>
@@ -1385,7 +1403,8 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       hasRecords: events.length > 0, hasDeposits: deposits.length > 0, deposits: deposits, trades: trades,
       allDeposits: allDeposits, allTrades: allTrades, skipped: skipped,
       depositThisMonth: monthDeposits.length > 0, depositThisMonthTotal: monthDeposits.reduce(function (s, d) { return s + d.amount_gbp; }, 0),
-      lastDeposit: deposits.length ? deposits[deposits.length - 1] : null
+      lastDeposit: deposits.length ? deposits[deposits.length - 1] : null,
+      model: modelPortfolio(pipeline, checks, prices, days, st.slice, today)
     };
   }
 
@@ -1504,6 +1523,81 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n') + '\r\n';
   }
 
+  /* ---------------- model portfolio ----------------
+     A paper account that follows the rules exactly from MODEL_START, so the strategy can be judged before any
+     money goes in. It starts as 100 in the S&P 500 fund (VUAG). Each spin-off whose buy day falls on or after
+     the start is bought on its buy day with 1/slice of the account (trimming the other spin-offs if the fund
+     runs short) and sold on its model sell date; the money goes back into the fund. Costs: MODEL_COST each way.
+     Everything is in pounds, so returns line up with the two UK funds. */
+  var MODEL_START = '2026-10-20';
+  var MODEL_COST = 0.0025;
+  var MODEL_BOUGHT = { BUY: 1, HOLD: 1, SELL: 1, done: 1 };
+  function modelPortfolio(pipeline, checks, prices, days, slice, today, start) {
+    start = start || MODEL_START;
+    var sp = prices.VUAG, nq = prices.EQQQ, fx = prices.GBPUSD;
+    if (!sp || !fx || !days.length || !(slice >= 1)) return null;
+    var end = lastDate(sp);
+    if (lastDate(fx) > end) end = lastDate(fx);
+    var trades = [];
+    pipeline.forEach(function (raw) {
+      var tk = raw.ticker ? cleanTicker(raw.ticker) : null;
+      if (!tk || !prices[tk] || !MODEL_BOUGHT[raw.status] || !isYMD(raw.buy_date)) return;
+      var d = raw.buy_date;
+      if (d < start || d > today) return;
+      var chk = checks[String(raw.id)];
+      if (chk && chk.genuine === false) return;
+      if (lastDate(prices[tk]) > end) end = lastDate(prices[tk]);
+      var sell = isYMD(raw.model_sell_date) ? raw.model_sell_date : tradingDayAfter(days, d, HOLD_DAYS) || null; /* null: date not known yet, keep holding */
+      trades.push({ ticker: tk, company: raw.company ? String(raw.company) : tk, buy: d, sell: sell, open: +raw.buy_open > 0 ? +raw.buy_open : null });
+    });
+    if (end > today) end = today;
+    var axis = days.filter(function (d) { return d >= start && d <= end; });
+    if (!axis.length) return { start: start, end: null, dates: [], model: [], sp: [], nq: [], now: null, bought: 0, held: 0, trades: [] };
+    trades.sort(function (a, b) { return cmpStr(a.buy, b.buy) || cmpStr(a.ticker, b.ticker); });
+    var sp0 = priceOn(sp, axis[0]), nq0 = nq ? priceOn(nq, axis[0]) : null;
+    var units = 100 / sp0, held = [], next = 0, out = { model: [], sp: [], nq: [] };
+    function spinGBP(hh, d) { return hh.shares * priceOn(prices[hh.ticker], d) / priceOn(fx, d); }
+    /* a spin-off's own return in pounds, per share, so trims (which cut shares, not the price) don't count as losses */
+    function tradeRet(hh, d, sold) { return priceOn(prices[hh.ticker], d) / priceOn(fx, d) / hh.unit0 * (1 - MODEL_COST) * (sold ? 1 - MODEL_COST : 1) - 1; }
+    axis.forEach(function (d) {
+      var spP = priceOn(sp, d);
+      /* sells first, then buys, as on a real trading day */
+      held = held.filter(function (hh) {
+        if (!hh.sell || hh.sell > d) return true;
+        units += spinGBP(hh, d) * (1 - MODEL_COST) / spP;
+        hh.result.sold = d; hh.result.ret = tradeRet(hh, d, true);
+        return false;
+      });
+      while (next < trades.length && trades[next].buy <= d) {
+        var tr = trades[next++];
+        var spinV = held.reduce(function (s, hh) { return s + spinGBP(hh, d); }, 0);
+        var want = (units * spP + spinV) / slice;
+        if (units * spP < want && spinV > 0) {
+          var need = Math.min(want - units * spP, spinV), f = need / spinV;
+          held.forEach(function (hh) { units += spinGBP(hh, d) * f * (1 - MODEL_COST) / spP; hh.shares *= 1 - f; });
+        }
+        var amt = Math.min(want, units * spP);
+        if (!(amt > 0)) continue;
+        units -= amt / spP;
+        var px = tr.buy === d && tr.open ? tr.open : priceOn(prices[tr.ticker], d);
+        tr.cost = amt;
+        held.push({ ticker: tr.ticker, sell: tr.sell, shares: amt * (1 - MODEL_COST) * priceOn(fx, d) / px, result: tr, unit0: px / priceOn(fx, d) });
+      }
+      var total = units * spP + held.reduce(function (s, hh) { return s + spinGBP(hh, d); }, 0);
+      out.model.push(total / 100 - 1);
+      out.sp.push(spP / sp0 - 1);
+      out.nq.push(nq ? priceOn(nq, d) / nq0 - 1 : null);
+    });
+    var n = axis.length - 1;
+    held.forEach(function (hh) { hh.result.ret = tradeRet(hh, axis[n], false); });
+    return {
+      start: axis[0], end: axis[n], dates: axis, model: out.model, sp: out.sp, nq: out.nq,
+      now: { model: out.model[n], sp: out.sp[n], nq: out.nq[n] },
+      bought: trades.filter(function (x) { return x.cost > 0; }).length, held: held.length,
+      trades: trades.filter(function (x) { return x.cost > 0; })
+    };
+  }
+
   root.SpinLogic = {
     HOLD_DAYS: HOLD_DAYS, DEFAULTS: DEFAULTS, FUNDS: FUNDS, TICKER_RE: TICKER_RE, DUST: DUST, MIN_DATE: MIN_DATE,
     SLICE_MIN: SLICE_MIN, SLICE_MAX: SLICE_MAX, RISK_LEVELS: RISK_LEVELS, riskLevel: riskLevel, validSlice: validSlice, validStoredSlice: validStoredSlice,
@@ -1515,6 +1609,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     normSeries: normSeries, priceOn: priceOn, cleanTrades: cleanTrades, cleanDeposits: cleanDeposits, normSettings: normSettings,
     buildEvents: buildEvents, indexPot: indexPot, stepAt: stepAt, benchTimeline: benchTimeline, spinValueGBP: spinValueGBP,
     positions: positions, sellDateFor: sellDateFor, xirr: xirr, fundingPlan: fundingPlan, computeAll: computeAll,
+    modelPortfolio: modelPortfolio, MODEL_START: MODEL_START,
     fmtMoney: fmtMoney, fmtPct: fmtPct, fmtPts: fmtPts, fmtShares: fmtShares, fmtCompact: fmtCompact, parseAmount: parseAmount,
     cleanTicker: cleanTicker, validateTrade: validateTrade, validateDeposit: validateDeposit, recordsCSV: recordsCSV
   };
@@ -1725,6 +1820,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     renderGlobal(D);
     renderToday(D);
     renderPerformance(D);
+    renderModel(D);
     renderSpinoffs(D);
     renderRecords(D);
     restoreOpen(keep);
@@ -2174,6 +2270,59 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   }
 
   /* ---------- PERFORMANCE ---------- */
+  function modelTiles(m) {
+    var tile = function (k, v, c) { return h('div', null, h('div', { class: 'k' }, h('span', { class: 'keyline ' + c }), k), h('div', { class: 'v' }, h('span', { class: cls(v), text: v == null ? '–' : L.fmtPct(v) }))); };
+    return h('div', { class: 'stats stats--3' }, tile('Strategy', m.now.model, 'k-you'), tile('S&P 500 fund', m.now.sp, 'k-sp'), tile('Nasdaq-100 fund', m.now.nq, 'k-nq'));
+  }
+  function modelNote(m) {
+    if (!m.bought) return 'No spin-off has reached its buy day yet, so the model is all in the S&P 500 fund for now.';
+    return m.bought + (m.bought === 1 ? ' spin-off bought' : ' spin-offs bought') + ', ' + m.held + ' held now. Includes trading costs.';
+  }
+  function renderModel(D) {
+    var m = D.model;
+    var empty = !m || !m.now;
+    $('modelAsOf').textContent = empty ? '' : 'to ' + L.fmtDate(m.end, { year: true });
+    if (empty) {
+      var msg = 'The model starts once the daily check has brought in prices from 20 Oct 2026.';
+      fill('modelHead', h('p', { class: 'empty', text: msg })); fill('modelChart', null); fill('modelTrades', null);
+      fill('todayModel', h('p', { class: 'small muted', text: msg }));
+      return;
+    }
+    fill('modelHead', [modelTiles(m), h('p', { class: 'small muted', style: 'margin:8px 0 0', text: modelNote(m) })]);
+    fill('todayModel', [modelTiles(m), h('p', { class: 'small muted', style: 'margin:8px 0 0' }, modelNote(m) + ' ', h('button', { type: 'button', class: 'linkbtn small', onclick: function () { setTab('performance'); } }, 'See the chart'))]);
+    drawModelChart(m);
+    if (!m.trades.length) { fill('modelTrades', null); return; }
+    fill('modelTrades', h('ul', { class: 'rows', style: 'margin-top:12px' }, m.trades.map(function (tr) {
+      var sellTxt = tr.sold ? 'sold ' + L.fmtDate(tr.sold, { weekday: false }) : tr.sell ? 'sells ' + L.fmtDate(tr.sell, { weekday: false, year: true }) : '';
+      return h('li', { class: 'closed' },
+        h('div', { class: 'closed__top' }, h('span', null, tickEl(tr.ticker), h('span', { class: 'fg2', text: ' ' + tr.company })),
+          h('span', { class: 'closed__ret num ' + cls(tr.ret), text: tr.ret == null ? '–' : L.fmtPct(tr.ret) })),
+        h('div', { class: 'closed__sub', text: 'Bought ' + L.fmtDate(tr.buy, { weekday: false }) + (sellTxt ? ' · ' + sellTxt : '') }));
+    })));
+  }
+  function drawModelChart(m) {
+    var box = $('modelChart'); if (!box) return;
+    var W = Math.max(280, box.clientWidth || 600), H = W < 520 ? 200 : 240, ml = 46, mr = 12, mt = 10, mb = 26;
+    var all = m.model.concat(m.sp, m.nq).filter(function (v) { return v != null && isFinite(v); });
+    var lo = Math.min(0, Math.min.apply(null, all)), hi = Math.max(0, Math.max.apply(null, all));
+    var span = hi - lo || 0.02, step = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.25, 0.5, 1].filter(function (s) { return span / s <= 5; })[0] || 1;
+    lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step; if (hi === lo) hi = lo + step;
+    var n = m.dates.length, X = function (i) { return ml + (n < 2 ? 0 : i / (n - 1) * (W - ml - mr)); }, Y = function (v) { return mt + (hi - v) / (hi - lo) * (H - mt - mb); };
+    var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, 'aria-hidden': 'true' });
+    for (var v = lo; v <= hi + 1e-9; v += step) {
+      add(svg, sv('line', { class: Math.abs(v) < 1e-9 ? 'axis' : 'gridline', x1: ml, x2: W - mr, y1: Y(v), y2: Y(v) }));
+      var tl = sv('text', { class: 'tl', x: ml - 6, y: Y(v) + 4, 'text-anchor': 'end' }); tl.textContent = L.fmtPct(v, { dp: step < 0.01 ? 1 : 0 }); add(svg, tl);
+    }
+    [0, n - 1].forEach(function (i, k) { if (k && n < 2) return; var tx = sv('text', { class: 'tl', x: X(i), y: H - 6, 'text-anchor': k ? 'end' : 'start' }); tx.textContent = L.fmtDate(m.dates[i], { weekday: false }); add(svg, tx); });
+    [['nq', 'ln-nq', 'end-nq'], ['sp', 'ln-sp', 'end-sp'], ['model', 'ln-you', 'end-you']].forEach(function (s) {
+      var pts = [], arr = m[s[0]];
+      arr.forEach(function (val, i) { if (val != null && isFinite(val)) pts.push((pts.length ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(val).toFixed(1)); });
+      if (!pts.length) return;
+      if (n > 1) add(svg, sv('path', { class: 'ln ' + s[1], d: pts.join('') }));
+      var last = arr[n - 1]; if (last != null) add(svg, sv('circle', { class: s[2] + ' ring', cx: X(n - 1), cy: Y(last), r: 4 }));
+    });
+    box.textContent = ''; add(box, svg);
+  }
   function renderPerformance(D) {
     var hd = D.head;
     $('chartAsOf').textContent = D.asOf && D.series && D.series.account.some(function (v) { return v != null; }) ? 'to ' + L.fmtDate(D.asOf, { year: true }) : '';
@@ -2261,6 +2410,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     return p;
   }
   function drawChart(D) {
+    if (D.model && D.model.now) drawModelChart(D.model);
     var host = $('chart');
     if (!host || host.offsetParent === null) return;
     var s = D.series;

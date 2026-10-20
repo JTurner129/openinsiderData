@@ -768,5 +768,41 @@ if (existsSync(REAL)) {
   });
 } else console.log('(skipping real engine output tests: ' + REAL + ' not found)');
 
+test('model portfolio: buys at 1/slice, trims when the fund is short, sells on the model date, returns in pounds', () => {
+  const days = ['2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09'];
+  const s = (c) => L.normSeries({ dates: days, close: c });
+  const prices = { VUAG: s([100, 100, 100, 110, 110]), EQQQ: s([50, 50, 50, 50, 55]), GBPUSD: s([1.25, 1.25, 1.25, 1.25, 1.25]),
+    AAA: s([10, 10, 20, 20, 20]), BBB: s([5, 5, 5, 5, 5]) };
+  const pipe = [
+    { id: '1', ticker: 'AAA', status: 'HOLD', buy_date: '2026-01-06', model_sell_date: '2026-01-08', buy_open: 10 },
+    { id: '2', ticker: 'BBB', status: 'BUY', buy_date: '2026-01-07' },
+    { id: '3', ticker: 'BBB', status: 'skip', buy_date: '2026-01-07' },
+    { id: '4', ticker: 'AAA', status: 'HOLD', buy_date: '2025-12-01' } /* before the start: ignored */ ];
+  const m = L.modelPortfolio(pipe, {}, prices, days, 2, '2026-01-09', '2026-01-05');
+  assert.equal(m.bought, 2); assert.equal(m.held, 1);
+  const c = 0.0025;
+  // day 2: buy AAA with 50 (half of 100); day 3: AAA doubles -> 50*(1-c)*2, fund 50
+  const aaa = 50 * (1 - c) * 2, fund3 = 50;
+  // day 3: buy BBB with half of the account; the fund (50) is short, so AAA is trimmed for the rest
+  const tot3 = aaa + fund3, want = tot3 / 2, need = want - fund3;
+  const aaaLeft = aaa - need, amt = fund3 + need * (1 - c), fundAfter = 0, bbb = amt * (1 - c); /* trim proceeds lose costs, so the buy is just under half */
+  near(m.model[2], (aaaLeft + fundAfter + bbb) / 100 - 1, 1e-9, 'day 3 value');
+  // day 4: AAA sold (fund +10% that day), day 5 nothing changes but the fund
+  const fund4 = fundAfter * 1.1 + aaaLeft * (1 - c);
+  near(m.model[4], (fund4 + bbb) / 100 - 1, 1e-9, 'day 5 value');
+  near(m.now.sp, 0.10, 1e-12); near(m.now.nq, 0.10, 1e-12);
+  const a = m.trades.find((x) => x.ticker === 'AAA');
+  assert.equal(a.sold, '2026-01-08'); near(a.ret, 2 * (1 - c) * (1 - c) - 1, 1e-9, 'AAA return ignores the trim');
+});
+test('model portfolio: skips spin-offs marked not genuine and needs fund prices', () => {
+  const days = ['2026-01-05', '2026-01-06'];
+  const s = (c) => L.normSeries({ dates: days, close: c });
+  const prices = { VUAG: s([100, 100]), GBPUSD: s([1.3, 1.3]), AAA: s([10, 12]) };
+  const pipe = [{ id: '9', ticker: 'AAA', status: 'BUY', buy_date: '2026-01-06' }];
+  assert.equal(L.modelPortfolio(pipe, { 9: { genuine: false } }, prices, days, 8, '2026-01-06', '2026-01-05').bought, 0);
+  assert.equal(L.modelPortfolio(pipe, {}, prices, days, 8, '2026-01-06', '2026-01-05').bought, 1);
+  assert.equal(L.modelPortfolio(pipe, {}, { GBPUSD: prices.GBPUSD }, days, 8, '2026-01-06'), null);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
