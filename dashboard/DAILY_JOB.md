@@ -14,7 +14,7 @@ open pull requests or change anything outside the steps below.
 ```bash
 [ -d /home/user/openinsiderdata ] || git clone -q -b insider-backtest https://github.com/JTurner129/openinsiderData /home/user/openinsiderdata
 cd /home/user/openinsiderdata && git fetch -q origin insider-backtest && git checkout -q -B insider-backtest origin/insider-backtest
-python3 -c "import pandas, numpy, requests, yaml, yfinance" 2>/dev/null || pip install -q pandas numpy requests pyyaml yfinance
+python3 -c "import pandas, numpy, requests, yaml, yfinance" 2>/dev/null || python3 -m pip install -q pandas numpy requests pyyaml yfinance
 rm -rf /tmp/spin && mkdir -p /tmp/spin/db /tmp/spin/cur
 ```
 
@@ -36,21 +36,28 @@ If the scan crashes, go to step 8.
 
 ## 4. Check new spin-offs (at most 5 a day)
 
-Read `/tmp/spin/out/needs_check.json`. For each entry, find out whether it is a genuine spin-off: a
-parent company separating a business and distributing the new company's shares to the parent's
-shareholders. Use the Form 10 filing (`form10_url`, or the EDGAR filing index for the CIK) and, if
-needed, the parent's press release. SEC pages need a User-Agent header, so fetch them with
-`curl -s -A "insider-backtest research contact@example.org" <url>`.
+Read `/tmp/spin/out/needs_check.json`. For each entry, decide from the FILING TEXT (not from memory)
+whether it is a genuine spin-off: a parent company separating a business and distributing the new
+company's shares to the parent's shareholders.
+
+1. Open the filing index at `form10_url` (or the EDGAR filing index for the CIK). SEC pages need a
+   User-Agent header, so fetch with
+   `curl -s -A "insider-backtest research contact@example.org" <url> -o /tmp/spin/f.htm`.
+2. Find the information statement: the main 10-12B document or Exhibit 99.1. Fetch it and search it,
+   for example `grep -o -i -E ".{0,200}(spin-off|distribution of|pro rata|separation).{0,200}" /tmp/spin/f.htm | head`.
+3. Put one short quoted sentence from the filing in `note` that shows the decision.
 
 Write one document per entry with ArtifactData `set`, collection `checks`, doc_id = the CIK:
 
 ```json
-{"genuine": true, "parent": "Honeywell International", "business": "Aerospace engines and avionics", "note": "", "checked_at": "<UTC ISO time>"}
+{"genuine": true, "parent": "Honeywell International", "business": "Aerospace engines and avionics", "note": "\"Honeywell will distribute all of the outstanding shares ... pro rata\"", "checked_at": "<UTC ISO time now>"}
 ```
 
-Use `genuine: false` for re-registrations after bankruptcy, SPAC-like shells, trusts, companies that
-listed by IPO rather than distribution, and similar. Use `null` with a note if it is unclear. Keep
-`business` under 80 characters.
+Use `genuine: false` for re-domiciliations or new holding companies of an existing group (the same
+business keeps trading under a new name), re-registrations after bankruptcy, SPAC-like shells, trusts,
+companies that listed by IPO rather than distribution, and similar. If you could not read the filing
+text, use `genuine: null` and say so in `note`; never mark `true` or `false` from memory alone. Keep
+`business` under 80 characters. A check that already exists is not redone.
 
 ## 5. Read current document versions
 
