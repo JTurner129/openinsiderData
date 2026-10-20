@@ -1,11 +1,2386 @@
 <title>Spin-off Tracker</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;500;600;700&display=swap">
 <style>
-:root{--bg:#f6f7f6;--fg:#151816;--muted:#767d78}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#131614;--fg:#eef0ee;--muted:#8e958f;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#131614;--fg:#eef0ee;--muted:#8e958f;color-scheme:dark}
-body{background:var(--bg);color:var(--fg);font:16px system-ui,sans-serif}
-main{max-width:640px;margin:0 auto;padding-block:48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-p{color:var(--muted)}
+/* Layout: phone-first single column under a sticky tab bar (Today / Performance / Spin-offs / Records).
+   From 900px the Today and Records tabs split into a wide action column and a narrow side column.
+   Calm ledger look: white panels only where a block is an object (action, chart, form); rows elsewhere. */
+:root{
+  --bg:#f6f7f6; --panel:#ffffff; --fg:#151816; --fg2:#4b514d; --muted:#767d78; --rule:#dce0dd; --grid:#e8ebe9;
+  --pos:#1d7a43; --neg:#b23a32; --warn:#8a5a00; --link:#1f63b8; --focus:#2a78d6;
+  --pos-soft:#e4f1e8; --neg-soft:#f7e5e3; --warn-soft:#f5ecd4; --info-soft:#e6eef8;
+  --s-you:#2a78d6; --s-sp:#eb6834; --s-nq:#1baf7a; --s-in:#767d78;
+  --btn:#151816; --btn-fg:#ffffff; --scrim:rgba(21,24,22,.42); --hover:rgba(21,24,22,.05); --shadow:rgba(21,24,22,.12);
+  --display:"Newsreader",Georgia,"Times New Roman",serif;
+  --body:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131614; --panel:#1a1d1b; --fg:#eef0ee; --fg2:#c0c6c2; --muted:#8e958f; --rule:#2e3330; --grid:#252a27;
+    --pos:#5cc286; --neg:#ef7d73; --warn:#e3b45c; --link:#7fb2f0; --focus:#6aa8f0;
+    --pos-soft:#16301f; --neg-soft:#3a1d1a; --warn-soft:#33290f; --info-soft:#17283a;
+    --s-you:#3d8ae6; --s-sp:#d95926; --s-nq:#199e70; --s-in:#8e958f;
+    --btn:#eef0ee; --btn-fg:#131614; --scrim:rgba(0,0,0,.62); --hover:rgba(255,255,255,.06); --shadow:rgba(0,0,0,.45);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131614; --panel:#1a1d1b; --fg:#eef0ee; --fg2:#c0c6c2; --muted:#8e958f; --rule:#2e3330; --grid:#252a27;
+  --pos:#5cc286; --neg:#ef7d73; --warn:#e3b45c; --link:#7fb2f0; --focus:#6aa8f0;
+  --pos-soft:#16301f; --neg-soft:#3a1d1a; --warn-soft:#33290f; --info-soft:#17283a;
+  --s-you:#3d8ae6; --s-sp:#d95926; --s-nq:#199e70; --s-in:#8e958f;
+  --btn:#eef0ee; --btn-fg:#131614; --scrim:rgba(0,0,0,.62); --hover:rgba(255,255,255,.06); --shadow:rgba(0,0,0,.45);
+  color-scheme:dark;
+}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--body);}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+*,*::before,*::after{box-sizing:border-box}
+a{color:var(--link);text-underline-offset:2px}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.num,.tick{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.muted{color:var(--muted)}
+.fg2{color:var(--fg2)}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+.small{font-size:13px}
+.vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* masthead + tabs */
+.mast .wrap{padding-block:16px 6px;display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font:600 23px/1.15 var(--display);letter-spacing:-.01em;margin:0}
+.mast__meta{font-size:13px;color:var(--muted);min-width:0}
+.tabbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--bg);border-bottom:1px solid var(--rule)}
+.tabs{display:flex;gap:4px}
+.tab{appearance:none;background:none;border:0;cursor:pointer;flex:1 1 0;min-width:0;padding:12px 2px 11px;font-size:14px;font-weight:600;color:var(--muted);box-shadow:inset 0 -2px 0 transparent;display:inline-flex;justify-content:center;align-items:center;gap:6px;white-space:nowrap}
+.tab:hover{color:var(--fg2)}
+.tab[aria-selected="true"]{color:var(--fg);box-shadow:inset 0 -2px 0 var(--fg)}
+.tab__badge{font:600 11px/1 var(--mono);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--fg);color:var(--bg);display:inline-flex;align-items:center;justify-content:center}
+@media (min-width:640px){.tab{flex:0 0 auto;padding-inline:14px}}
+
+main.wrap{padding-block:16px 56px}
+.tabpanel{display:flex;flex-direction:column;gap:24px}
+.cols{display:grid;grid-template-columns:minmax(0,1fr);gap:24px}
+.cols>*{min-width:0;display:flex;flex-direction:column;gap:24px}
+@media (min-width:900px){.cols{grid-template-columns:minmax(0,3fr) minmax(0,2fr);align-items:start}}
+.block{display:flex;flex-direction:column;gap:10px;min-width:0}
+.sec{font:500 21px/1.2 var(--display);margin:0;text-wrap:balance;letter-spacing:-.005em}
+.sec-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.sub{margin:0;color:var(--fg2);font-size:14px;max-width:65ch}
+.stack{display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:var(--r);padding:16px;min-width:0}
+.panel>h2,.panel>h3{margin-top:0}
+
+/* buttons */
+.btn{appearance:none;cursor:pointer;border:1px solid var(--rule);background:var(--panel);color:var(--fg);border-radius:6px;padding:9px 14px;font-size:14px;font-weight:600;line-height:1.2;display:inline-flex;align-items:center;gap:6px;min-height:40px}
+.btn:hover{background:var(--hover)}
+.btn--primary{background:var(--btn);color:var(--btn-fg);border-color:var(--btn)}
+.btn--primary:hover{background:var(--btn);opacity:.9}
+.btn--quiet{border-color:transparent;background:transparent;color:var(--fg2);padding-inline:8px}
+.btn--quiet:hover{color:var(--fg)}
+.btn--danger{color:var(--neg);border-color:var(--neg)}
+.btn--small{min-height:32px;padding:5px 10px;font-size:13px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.linkbtn{appearance:none;background:none;border:0;padding:0;color:var(--link);text-decoration:underline;text-underline-offset:2px;cursor:pointer;font-size:inherit}
+
+/* chips */
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px 3px 6px;border-radius:4px;line-height:1.3;white-space:nowrap}
+.chip svg{width:14px;height:14px;flex:none}
+.chip--buy{background:var(--pos-soft);color:var(--pos)}
+.chip--sell{background:var(--warn-soft);color:var(--warn)}
+.chip--late{background:var(--neg-soft);color:var(--neg)}
+.chip--info{background:var(--info-soft);color:var(--link)}
+.chip--plain{background:var(--grid);color:var(--fg2)}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:4px;background:var(--grid);color:var(--fg2);white-space:nowrap}
+
+/* status line + banners */
+.statusline{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;font-size:13px;color:var(--fg2)}
+.statusline__txt{display:flex;flex-wrap:wrap;gap:2px 12px;min-width:0}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--pos);margin-right:6px;vertical-align:1px}
+.dot--warn{background:var(--warn)} .dot--bad{background:var(--neg)}
+.banner{border-radius:var(--r);padding:12px 14px;font-size:14px;display:flex;gap:10px;align-items:flex-start;min-width:0}
+.banner svg{flex:none;width:18px;height:18px;margin-top:2px}
+.banner>div{min-width:0}
+.banner p{margin:0}
+.banner p+p,.banner ul{margin-top:4px}
+.banner ul{margin-bottom:0;padding-left:18px}
+.banner--warn{background:var(--warn-soft);color:var(--fg)} .banner--warn svg{color:var(--warn)}
+.banner--bad{background:var(--neg-soft);color:var(--fg)} .banner--bad svg{color:var(--neg)}
+.banner--info{background:var(--info-soft);color:var(--fg)} .banner--info svg{color:var(--link)}
+.checknow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.checknow__msg{font-size:13px;color:var(--fg2)}
+
+/* action cards */
+.action{display:flex;flex-direction:column;gap:12px}
+.action__head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.action__when{font-size:13px;color:var(--fg2)}
+.action__title{margin:0;font-size:18px;font-weight:600;line-height:1.3;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.action__title .tick{font-size:17px;font-weight:600}
+.action__title .co{font-weight:500;color:var(--fg2);font-size:16px}
+.action__lead{margin:0;font-size:16px}
+.amount{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.amount__v{font:600 30px/1.1 var(--body);letter-spacing:-.02em}
+.amount__n{font-size:13px;color:var(--fg2)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px 16px;margin:0}
+.facts div{min-width:0}
+.facts dt{font-size:12px;color:var(--muted)}
+.facts dd{margin:0;font-size:14px}
+.plan{border-top:1px solid var(--rule);padding-top:10px;font-size:14px;display:flex;flex-direction:column;gap:6px}
+.plan ul{margin:0;padding-left:18px}
+.checkrow{display:flex;gap:8px;align-items:flex-start;font-size:14px;color:var(--fg2)}
+.checkrow svg{flex:none;width:16px;height:16px;margin-top:2px}
+.checkrow--ok svg{color:var(--pos)} .checkrow--unk svg{color:var(--muted)}
+.checkrow>div{min-width:0}
+details.steps{border-top:1px solid var(--rule);padding-top:8px}
+details.steps summary,details.more summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--fg2);list-style-position:inside}
+details.steps ol{margin:8px 0 0;padding-left:22px;display:flex;flex-direction:column;gap:6px;font-size:14px}
+details.steps li::marker{font-family:var(--mono);color:var(--muted)}
+.todayplan h3{margin:0 0 6px;font-size:16px}
+.todayplan ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px;font-size:15px}
+.todayplan li::marker{font-family:var(--mono);color:var(--muted)}
+.closed{display:flex;flex-direction:column;gap:2px}
+.closed__top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.closed__top>span:first-child{min-width:0}
+.closed__ret{font-weight:600;font-size:16px}
+.closed__sub{font-size:13px;color:var(--fg2)}
+.only-wide{display:none}
+@media (min-width:640px){.only-wide{display:block}.only-narrow{display:none}}
+.nothing{display:flex;flex-direction:column;gap:6px}
+.nothing p{margin:0}
+.nothing__h{font-size:17px;font-weight:600}
+
+/* summary */
+.summary{display:flex;flex-direction:column;gap:12px}
+.hero{font:600 48px/1.05 var(--body);letter-spacing:-.025em;margin:0}
+.hero-sub{margin:0;font-size:14px;color:var(--fg2)}
+.vsrow{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--rule)}
+.vsrow>div{padding:10px 0;min-width:0}
+.vsrow>div+div{padding-left:14px;border-left:1px solid var(--rule)}
+.vsrow .v{font:600 17px/1.3 var(--mono)}
+.vsrow .k{font-size:12px;color:var(--muted)}
+.keyline{display:inline-block;width:14px;height:0;border-top:2px solid currentColor;vertical-align:4px;margin-right:6px}
+.k-you{color:var(--s-you)} .k-sp{color:var(--s-sp)} .k-nq{color:var(--s-nq)} .k-in{color:var(--s-in)}
+.k-in.keyline{border-top-style:dashed}
+.expo{display:flex;flex-direction:column;gap:6px;padding-top:10px;border-top:1px solid var(--rule)}
+.expo__top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.expo__top b{font-weight:600}
+.expo .meter>span{background:var(--s-you)}
+.remind{font-size:14px;color:var(--fg2);display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+
+/* lists */
+.rows{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+.rows>li{border-bottom:1px solid var(--rule);padding:10px 0;min-width:0}
+.cal{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px;align-items:baseline}
+.cal__d{font:500 13px/1.3 var(--mono);color:var(--fg2)}
+.cal__d b{display:block;color:var(--fg);font-weight:600}
+.cal__t{min-width:0}
+.cal__t .tick{font-weight:600}
+.cal__s{font-size:13px;color:var(--muted)}
+
+/* performance */
+.cmp{width:100%;max-width:760px;border-collapse:collapse;font-size:14px}
+.cmp tbody th{white-space:nowrap}
+.cmp th,.cmp td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.cmp th:first-child,.cmp td:first-child{text-align:left;padding-left:0}
+.cmp td:last-child,.cmp th:last-child{padding-right:0}
+.cmp thead th{font-size:12px;font-weight:600;color:var(--fg2);vertical-align:bottom;line-height:1.3}
+.cmp tbody th{font-weight:500;color:var(--fg2)}
+.cmp td{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cmp .you{font-weight:600}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--fg2);margin:0;padding:0;list-style:none}
+.legend li{white-space:nowrap}
+.chart{position:relative;margin-top:8px;touch-action:pan-y;outline:none;border-radius:4px}
+.chart:focus-visible{outline:2px solid var(--focus);outline-offset:4px}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .gridline{stroke:var(--grid);stroke-width:1;shape-rendering:crispEdges}
+.chart .axis{stroke:var(--rule);stroke-width:1;shape-rendering:crispEdges}
+.chart .tl{fill:var(--muted);font:11px var(--body);font-variant-numeric:tabular-nums}
+.chart .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.chart .ln-you{stroke:var(--s-you)} .chart .ln-sp{stroke:var(--s-sp)} .chart .ln-nq{stroke:var(--s-nq)}
+.chart .ln-in{stroke:var(--s-in);stroke-width:1.5;stroke-dasharray:4 4}
+.chart .area-you{fill:var(--s-you);opacity:.08;stroke:none}
+.chart .end-you{fill:var(--s-you)} .chart .end-sp{fill:var(--s-sp)} .chart .end-nq{fill:var(--s-nq)} .chart .end-in{fill:var(--s-in)}
+.chart .ring{stroke:var(--panel);stroke-width:2}
+.chart .elab{font:11px var(--body);fill:var(--fg2)}
+.chart .elab .ev{font-family:var(--mono);fill:var(--fg);font-weight:600}
+.chart .leader{stroke:var(--muted);stroke-width:1}
+.chart .xh{stroke:var(--fg2);stroke-width:1;shape-rendering:crispEdges}
+.chart .hit{fill:transparent;cursor:crosshair}
+.tip{position:absolute;top:0;left:0;pointer-events:none;background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:8px 10px;box-shadow:0 4px 14px var(--shadow);font-size:12px;min-width:150px;z-index:2}
+.tip__d{color:var(--muted);margin-bottom:4px}
+.tip__r{display:flex;align-items:center;gap:8px;line-height:1.6}
+.tip__r .v{font:600 13px var(--mono);margin-left:auto;order:2}
+.tip__r .n{color:var(--fg2);order:1}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+.stats>div{background:var(--panel);padding:12px 14px;min-width:0}
+.stats .k{font-size:12px;color:var(--muted)}
+.stats .v{font:600 20px/1.3 var(--body)}
+@media (min-width:640px){.stats{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.dtable{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
+.dtable th,.dtable td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
+.dtable th:first-child,.dtable td:first-child{text-align:left;padding-left:0}
+.dtable thead th{font-size:12px;color:var(--fg2);font-weight:600}
+.dtable td{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.dtable td.txt{font-family:var(--body)}
+
+/* positions + pipeline */
+.poslist{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+@media (min-width:760px){.poslist{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pos-card{display:flex;flex-direction:column;gap:10px}
+.pos-card__h{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.pos-card__t{margin:0;font-size:16px;font-weight:600;min-width:0}
+.pos-card__t .co{display:block;font-weight:400;font-size:13px;color:var(--fg2)}
+.pos-card__ret{font:600 20px/1.2 var(--mono);text-align:right}
+.meter{height:6px;border-radius:3px;background:var(--grid);overflow:hidden}
+.meter>span{display:block;height:100%;background:var(--fg2);border-radius:3px}
+.meter--due>span{background:var(--warn)}
+.meterlbl{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--fg2);flex-wrap:wrap}
+.grp{display:flex;flex-direction:column;gap:6px}
+.grp__h{display:flex;align-items:baseline;gap:8px}
+.grp__h h3{margin:0;font-size:15px;font-weight:600}
+.pipe{display:flex;flex-direction:column;gap:4px}
+.pipe__top{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.pipe__top .tick{font-weight:600}
+.pipe__co{font-weight:500}
+.pipe__dates{font-size:13px;color:var(--fg2)}
+.pipe__dates span+span::before{content:" · ";color:var(--muted)}
+.pipe__note{font-size:13px;color:var(--muted)}
+.pipe__links{font-size:13px;display:flex;gap:12px;flex-wrap:wrap}
+a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
+
+/* records */
+.form{display:flex;flex-direction:column;gap:12px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label,.field legend,.fs legend{font-size:13px;font-weight:600;color:var(--fg2)}
+.field input[type=text],.field input[type=date],.field input[type=number],.field input:not([type]),.field select{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:9px 10px;min-height:42px;width:100%;font-size:16px}
+.field input:focus-visible,.field select:focus-visible{outline:2px solid var(--focus);outline-offset:0}
+.field .hint{font-size:12px;color:var(--muted)}
+.field .err{font-size:13px;color:var(--neg)}
+.field input[aria-invalid="true"]{border-color:var(--neg)}
+.frow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.fs{border:0;margin:0;padding:0;min-width:0}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--panel)}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{padding:8px 14px;font-size:14px;font-weight:600;color:var(--fg2);cursor:pointer;min-height:38px;display:inline-flex;align-items:center}
+.seg label+input+label{border-left:1px solid var(--rule)}
+.seg input:checked+label{background:var(--btn);color:var(--btn-fg)}
+.seg input:focus-visible+label{outline:2px solid var(--focus);outline-offset:-2px}
+.radios{display:flex;flex-direction:column;gap:8px}
+.radio{display:flex;gap:10px;align-items:flex-start;font-size:14px}
+.radio input{margin-top:4px;accent-color:var(--fg)}
+.radio>span{min-width:0}
+.radio__d{display:block;color:var(--fg2);font-size:13px;margin-top:2px}
+.field--inset{margin:10px 0 0 26px;max-width:220px}
+.formerr{font-size:14px;color:var(--neg);margin:0}
+.rec{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center}
+.rec__main{min-width:0;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline}
+.rec__date{font:500 13px var(--mono);color:var(--fg2);min-width:84px}
+.rec__amt{font:600 14px var(--mono)}
+.rec__note{font-size:13px;color:var(--muted);flex-basis:100%;overflow-wrap:anywhere}
+.rec__confirm{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;background:var(--neg-soft);padding:8px 10px;border-radius:6px}
+.more-btn{margin-top:8px;align-self:flex-start;text-align:left}
+.help{font-size:14px;color:var(--fg2)}
+.help .sec{color:var(--fg)}
+.block>.btn{align-self:flex-start}
+.fs legend{padding:0}
+.help h3{font-size:15px;color:var(--fg);margin:14px 0 4px}
+.help ol,.help ul{padding-left:20px;margin:4px 0}
+.help li{margin:3px 0}
+.help p{margin:6px 0;max-width:65ch}
+.empty{color:var(--fg2);font-size:14px;margin:0}
+.loading{color:var(--muted);font-size:14px}
+
+/* sheet */
+.sheet{position:fixed;inset:0;z-index:20;display:flex;align-items:flex-end;justify-content:center;background:var(--scrim)}
+.sheet__box{background:var(--panel);width:100%;max-width:520px;max-height:92%;overflow:auto;border-radius:12px 12px 0 0;padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));box-shadow:0 -6px 24px var(--shadow)}
+@media (min-width:640px){.sheet{align-items:center}.sheet__box{border-radius:12px;padding:22px}}
+.sheet__h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.sheet__h h2{margin:0}
+.sheet__hint{margin:0;font-size:14px;color:var(--fg2)}
+
+/* toasts */
+.toasts{position:fixed;z-index:30;left:0;right:0;bottom:0;padding:0 max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.toast{pointer-events:auto;background:var(--btn);color:var(--btn-fg);border-radius:8px;padding:10px 14px;font-size:14px;display:flex;gap:12px;align-items:center;max-width:520px;width:100%;box-shadow:0 6px 20px var(--shadow)}
+.toast span{min-width:0;flex:1}
+.toast svg{width:14px;height:14px;display:block}
+.toast button{appearance:none;background:none;border:0;color:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:4px}
+.toast--bad{background:var(--neg-soft);color:var(--fg);border:1px solid var(--neg)}
+
+@media (prefers-reduced-motion: no-preference){
+  .toast{animation:rise .18s ease-out}
+  @keyframes rise{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+  .btn,.tab{transition:background-color .12s,color .12s,opacity .12s}
+}
 </style>
-<main><h1>Spin-off Tracker</h1><p>Setting up. The full tracker will appear here shortly.</p></main>
+
+<header class="mast"><div class="wrap">
+  <h1 class="brand">Spin-off Tracker</h1>
+  <div class="mast__meta" id="mastMeta">Trading 212 Stocks &amp; Shares ISA</div>
+</div></header>
+
+<nav class="tabbar" aria-label="Sections"><div class="wrap tabs" role="tablist">
+  <button class="tab" type="button" role="tab" id="tab-today" data-tab="today" aria-controls="panel-today" aria-selected="true">Today<span class="tab__badge" id="badgeToday" hidden></span></button>
+  <button class="tab" type="button" role="tab" id="tab-performance" data-tab="performance" aria-controls="panel-performance" aria-selected="false" tabindex="-1">Performance</button>
+  <button class="tab" type="button" role="tab" id="tab-spinoffs" data-tab="spinoffs" aria-controls="panel-spinoffs" aria-selected="false" tabindex="-1">Spin-offs</button>
+  <button class="tab" type="button" role="tab" id="tab-records" data-tab="records" aria-controls="panel-records" aria-selected="false" tabindex="-1">Records</button>
+</div></nav>
+
+<main class="wrap">
+  <div id="globalNotice" class="stack" hidden></div>
+
+  <section class="tabpanel" id="panel-today" role="tabpanel" aria-labelledby="tab-today">
+    <div id="todayStatus" class="stack"><p class="loading">Loading your tracker…</p></div>
+    <div class="cols">
+      <div>
+        <div class="block">
+          <div class="sec-row"><h2 class="sec">What to do</h2><span class="lbl" id="todayDate"></span></div>
+          <div id="todayActions" class="stack"></div>
+        </div>
+      </div>
+      <div>
+        <div class="block">
+          <h2 class="sec">Your account</h2>
+          <div id="todaySummary"></div>
+        </div>
+        <div class="block">
+          <h2 class="sec">Coming up</h2>
+          <div id="todayComing"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tabpanel" id="panel-performance" role="tabpanel" aria-labelledby="tab-performance" hidden>
+    <div class="block">
+      <h2 class="sec">How you're doing</h2>
+      <p class="sub">Your account against putting the same deposits, on the same dates, into one index fund and doing nothing else.</p>
+      <div id="perfHead"></div>
+    </div>
+    <div class="panel block">
+      <div class="sec-row"><h2 class="sec">Account value</h2><span class="small muted" id="chartAsOf"></span></div>
+      <ul class="legend" id="chartLegend" aria-label="Chart key">
+        <li><span class="keyline k-you"></span>Your account</li>
+        <li><span class="keyline k-sp"></span>S&amp;P 500 fund only</li>
+        <li><span class="keyline k-nq"></span>Nasdaq-100 fund only</li>
+        <li><span class="keyline k-in"></span>Money in</li>
+      </ul>
+      <div id="chart" class="chart" tabindex="0" role="group" aria-label="Account value over time. Use the left and right arrow keys to read values."></div>
+      <details class="more" data-key="charttable">
+        <summary>Show the numbers by month</summary>
+        <div id="chartTable" class="tablewrap"></div>
+      </details>
+    </div>
+    <div class="block">
+      <h2 class="sec">Closed spin-offs</h2>
+      <div id="perfStats"></div>
+      <div id="perfClosed"></div>
+    </div>
+  </section>
+
+  <section class="tabpanel" id="panel-spinoffs" role="tabpanel" aria-labelledby="tab-spinoffs" hidden>
+    <div class="block">
+      <h2 class="sec">Your spin-offs</h2>
+      <p class="sub">Each one is sold 252 US trading days (about 12 months) after you bought it.</p>
+      <div id="spinPositions"></div>
+    </div>
+    <div class="block">
+      <h2 class="sec">Pipeline</h2>
+      <p class="sub">Companies that filed a Form 10 with the SEC to be spun off, from the daily scan.</p>
+      <div id="spinPipeline" class="stack"></div>
+    </div>
+  </section>
+
+  <section class="tabpanel" id="panel-records" role="tabpanel" aria-labelledby="tab-records" hidden>
+    <div id="recReadOnly"></div>
+    <div class="cols">
+      <div>
+        <div class="panel block">
+          <h2 class="sec">Add money</h2>
+          <div class="btns"><button type="button" class="btn btn--primary" id="depQuick">Add this month's £1,666.66</button></div>
+          <form class="form" id="depForm" novalidate>
+            <fieldset class="fs">
+              <legend>Type</legend>
+              <div class="seg">
+                <input type="radio" name="depKind" id="depKindIn" value="in" checked><label for="depKindIn">Deposit</label>
+                <input type="radio" name="depKind" id="depKindOut" value="out"><label for="depKindOut">Withdrawal</label>
+              </div>
+            </fieldset>
+            <div class="frow">
+              <div class="field"><label for="depDate">Date</label><input type="date" id="depDate" name="depDate" required><span class="err" id="depDateErr" hidden></span></div>
+              <div class="field"><label for="depAmount">Amount (£)</label><input type="text" inputmode="decimal" id="depAmount" name="depAmount" autocomplete="off" placeholder="1,666.66"><span class="err" id="depAmountErr" hidden></span></div>
+            </div>
+            <div class="field"><label for="depNote">Note (optional)</label><input type="text" id="depNote" name="depNote" maxlength="200" autocomplete="off"></div>
+            <div class="btns"><button type="submit" class="btn" id="depSubmit">Add to records</button></div>
+            <p class="small muted" style="margin:0">Starting out? Log the money already in your account as your first deposit, dated the day you opened the tracker.</p>
+          </form>
+        </div>
+
+        <div class="panel block">
+          <div class="sec-row"><h2 class="sec">Trades</h2><button type="button" class="btn btn--primary" id="recAddTrade">Record a trade</button></div>
+          <p class="sub">Log every spin-off you buy or sell, with the pounds Trading 212 actually took or paid. Index fund trades don’t need logging.</p>
+        </div>
+
+        <div class="block">
+          <h2 class="sec">Trade history</h2>
+          <div id="recTrades"></div>
+        </div>
+        <div class="block">
+          <h2 class="sec">Deposits</h2>
+          <div id="recDeposits"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel block" id="settingsPanel">
+          <h2 class="sec">Settings</h2>
+          <form class="form" id="setForm" novalidate>
+            <fieldset class="fs">
+              <legend>Index fund you hold</legend>
+              <div class="radios">
+                <label class="radio" for="setFundVUAG"><input type="radio" name="setFund" id="setFundVUAG" value="VUAG"><span><b>VUAG</b> Vanguard S&amp;P 500, accumulating</span></label>
+                <label class="radio" for="setFundEQQQ"><input type="radio" name="setFund" id="setFundEQQQ" value="EQQQ"><span><b>EQQQ</b> Invesco Nasdaq-100, pays dividends</span></label>
+              </div>
+            </fieldset>
+            <fieldset class="fs">
+              <legend>Risk level: how much each new spin-off gets</legend>
+              <div class="radios">
+                <label class="radio" for="setRisk8"><input type="radio" name="setRisk" id="setRisk8" value="8"><span><b>Pure, 1/8 each</b><span class="radio__d">Each spin-off gets 1/8 of the account. Most of the time almost all your money is in spin-offs. Backtest about 22% a year, worst fall about 60%.</span></span></label>
+                <label class="radio" for="setRisk27"><input type="radio" name="setRisk" id="setRisk27" value="27"><span><b>Lower risk, 1/27 each</b><span class="radio__d">About 30% in spin-offs and 70% stays in the index fund. Backtest about 15% a year against 11% for the S&amp;P alone, worst fall about the same as the S&amp;P.</span></span></label>
+                <label class="radio" for="setRiskCustom"><input type="radio" name="setRisk" id="setRiskCustom" value="custom"><span><b>Custom</b><span class="radio__d">Any whole number from 4 to 40. A bigger number puts less in each spin-off and keeps more in the index fund.</span></span></label>
+              </div>
+              <div class="field field--inset" id="setSliceField" hidden><label for="setSlice">Each spin-off gets 1 out of</label><input type="number" id="setSlice" min="4" max="40" step="1" inputmode="numeric"><span class="hint">Whole number, 4 to 40</span><span class="err" id="setSliceErr" hidden></span></div>
+            </fieldset>
+            <div class="field"><label for="setMonthly">Monthly deposit (£)</label><input type="text" inputmode="decimal" id="setMonthly" autocomplete="off"><span class="err" id="setMonthlyErr" hidden></span></div>
+            <div class="btns"><button type="submit" class="btn" id="setSave">Save settings</button><span class="small muted" id="setMsg"></span></div>
+          </form>
+          <div class="block">
+            <h3 class="lbl" style="margin:8px 0 0">Hidden spin-offs</h3>
+            <div id="recDismissed"></div>
+          </div>
+        </div>
+
+        <div class="block" id="recDownloadBlock" hidden>
+          <button type="button" class="btn" id="recDownload">Download my records (CSV)</button>
+          <span class="small muted" id="recDownloadMsg"></span>
+        </div>
+
+        <div class="help block" id="help">
+          <h2 class="sec">How it works</h2>
+          <p>A spin-off is a company split out of a bigger parent and handed to the parent's shareholders. Many get sold off by index funds and big holders in the first weeks, and the backtest found buying after that and holding for a year beat the market on average. Results vary a lot from one spin-off to the next.</p>
+          <h3>The rules</h3>
+          <ol>
+            <li>A company files a Form 10-12B with the SEC and starts trading on a US exchange (NYSE, Nasdaq, NYSE American or Cboe) within a year. Its first trading day is day 0.</li>
+            <li>Buy at the open on US trading day 21, if over the previous 20 trading days it closed at $1 or more and traded at least $100,000 a day on average. You have 5 trading days to buy. After that it counts as missed.</li>
+            <li>Each buy gets <span id="helpSlice">1/8</span> of your whole account (your risk level in Settings). Pay for it by selling the index fund. If the fund doesn't cover it, sell all of the fund and trim your other spin-offs in proportion to their value.</li>
+            <li>Sell at the open 252 US trading days (about 12 months) after the day you bought. No other exits.</li>
+            <li>Everything else sits in the index fund, including your monthly deposits and sale proceeds.</li>
+          </ol>
+          <h3>What the page does</h3>
+          <p>A scheduled check scans SEC filings and prices <span id="helpSchedule">every weekday morning</span> and writes the results here. This page turns them into today's actions and compares your account with putting the same deposits into an S&amp;P 500 or Nasdaq-100 fund. It counts every pound that isn't in a spin-off as held in your index fund. If you choose EQQQ, reinvest its dividends so the numbers match.</p>
+          <p>Times are UK time. The US market opens at 14:30 UK time for most of the year and 13:30 for a few weeks in March and late October to early November, when the clocks change on different dates. Trading 212 charges 0.15% to convert pounds to dollars.</p>
+          <p><a href="https://claude.ai/artifact/J4apGniHiKu6SyBgqV3coT" target="_blank" rel="noopener">Read the research report behind these rules</a>. Past results don't guarantee future returns.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet__box" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <form class="form" id="tradeForm" novalidate>
+      <div class="sheet__h"><h2 class="sec" id="sheetTitle">Record a trade</h2><button type="button" class="btn btn--quiet btn--small" id="tradeCancelX">Close</button></div>
+      <p class="sheet__hint" id="tradeHint">Enter the trade as shown on the Trading 212 order confirmation.</p>
+      <fieldset class="fs">
+        <legend>Type</legend>
+        <div class="seg">
+          <input type="radio" name="tradeType" id="tradeTypeBuy" value="buy" checked><label for="tradeTypeBuy">Buy</label>
+          <input type="radio" name="tradeType" id="tradeTypeSell" value="sell"><label for="tradeTypeSell">Sell</label>
+        </div>
+      </fieldset>
+      <div class="frow">
+        <div class="field"><label for="tradeDate">Date</label><input type="date" id="tradeDate" required><span class="err" id="tradeDateErr" hidden></span></div>
+        <div class="field"><label for="tradeTicker">Ticker</label><input type="text" id="tradeTicker" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="12" placeholder="e.g. CLDR"><span class="err" id="tradeTickerErr" hidden></span></div>
+      </div>
+      <div class="frow">
+        <div class="field"><label for="tradeShares">Shares</label><input type="text" inputmode="decimal" id="tradeShares" autocomplete="off" placeholder="e.g. 41.2371"><span class="err" id="tradeSharesErr" hidden></span></div>
+        <div class="field"><label for="tradeAmount" id="tradeAmountLbl">Total paid (£)</label><input type="text" inputmode="decimal" id="tradeAmount" autocomplete="off"><span class="hint" id="tradeAmountHint">Including the 0.15% FX fee</span><span class="err" id="tradeAmountErr" hidden></span></div>
+      </div>
+      <div class="field"><label for="tradeNote">Note (optional)</label><input type="text" id="tradeNote" maxlength="200" autocomplete="off"></div>
+      <p class="formerr" id="tradeFormErr" hidden></p>
+      <div class="btns"><button type="submit" class="btn btn--primary" id="tradeSubmit">Save trade</button><button type="button" class="btn" id="tradeCancel">Cancel</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<!-- ======================================================================
+     SPIN-LOGIC: pure computations (no DOM). test_logic.mjs extracts this
+     block by its id and runs it in node:vm. Keep it self-contained.
+     ====================================================================== -->
+<script id="spin-logic">
+(function (root) {
+  'use strict';
+  var EPS = 1e-6;
+  var HOLD_DAYS = 252;
+  var DEFAULTS = { index_fund: 'VUAG', slice: 8, monthly_deposit: 1666.66 };
+  var SLICE_MIN = 4, SLICE_MAX = 40;
+  /* the two risk levels the backtest describes; any other whole number from 4 to 40 is "custom" */
+  var RISK_LEVELS = [
+    { slice: 8, name: 'Pure', text: 'Pure: each spin-off gets 1/8 of the account. Most of the time almost all your money is in spin-offs. Backtest about 22% a year, worst fall about 60%.' },
+    { slice: 27, name: 'Lower risk', text: 'Lower risk: about 30% in spin-offs and 70% stays in the index fund. Backtest about 15% a year against 11% for the S&P alone, worst fall about the same as the S&P.' }
+  ];
+  function riskLevel(slice) {
+    var hit = RISK_LEVELS.filter(function (r) { return r.slice === slice; })[0];
+    return hit ? { key: String(slice), name: hit.name, text: hit.text, slice: slice }
+      : { key: 'custom', name: 'Custom', slice: slice, text: 'Custom: each spin-off gets 1/' + slice + ' of the account. Not one of the two backtested settings.' };
+  }
+  function validSlice(n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && n >= SLICE_MIN && n <= SLICE_MAX; }
+  var FUNDS = {
+    VUAG: { code: 'VUAG', name: 'Vanguard S&P 500 UCITS ETF (Acc)', short: 'S&P 500 fund' },
+    EQQQ: { code: 'EQQQ', name: 'Invesco EQQQ Nasdaq-100 UCITS ETF', short: 'Nasdaq-100 fund' }
+  };
+  var WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  var TICKER_RE = /^[A-Z0-9.\-]{1,12}$/;
+
+  /* ---------------- dates: always "YYYY-MM-DD" strings; UTC-noon Dates only for maths ---------------- */
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function parseYMD(s) { return new Date(Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10), 12)); }
+  function toYMD(d) { return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate()); }
+  function isYMD(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && toYMD(parseYMD(s)) === s; }
+  function addDays(s, n) { var d = parseYMD(s); d.setUTCDate(d.getUTCDate() + n); return toYMD(d); }
+  function daysBetween(a, b) { return Math.round((parseYMD(b) - parseYMD(a)) / 86400000); }
+  function weekdayOf(s) { return WEEKDAYS[parseYMD(s).getUTCDay()]; }
+  function isWeekend(s) { var w = parseYMD(s).getUTCDay(); return w === 0 || w === 6; }
+  function monthKey(s) { return s.slice(0, 7); }
+  function monthName(s, long) { var m = +s.slice(5, 7) - 1; return long ? MONTHS_LONG[m] : MONTHS[m]; }
+  function fmtDate(s, opt) {
+    if (!isYMD(s)) return '';
+    opt = opt || {};
+    var d = parseYMD(s);
+    var out = (opt.weekday === false ? '' : WEEKDAYS[d.getUTCDay()].slice(0, 3) + ' ') + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()];
+    if (opt.year) out += ' ' + d.getUTCFullYear();
+    return out;
+  }
+  function zoneParts(t, tz) {
+    var f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var o = {};
+    f.formatToParts(new Date(t)).forEach(function (p) { o[p.type] = p.value; });
+    return { y: +o.year, m: +o.month, d: +o.day, H: (+o.hour) % 24, M: +o.minute, S: +o.second };
+  }
+  function dateInZone(t, tz) { var p = zoneParts(t, tz); return p.y + '-' + pad2(p.m) + '-' + pad2(p.d); }
+  function todayNY(t) { return dateInZone(t == null ? Date.now() : +t, 'America/New_York'); }
+  function todayLondon(t) { return dateInZone(t == null ? Date.now() : +t, 'Europe/London'); }
+  function tzOffset(t, tz) { var p = zoneParts(t, tz); return Date.UTC(p.y, p.m - 1, p.d, p.H, p.M, p.S) - Math.floor(t / 1000) * 1000; }
+  /* UTC instant of wall-clock hh:mm on dateStr in tz */
+  function zonedToUtc(dateStr, hh, mm, tz) {
+    var guess = Date.UTC(+dateStr.slice(0, 4), +dateStr.slice(5, 7) - 1, +dateStr.slice(8, 10), hh, mm);
+    var t = guess - tzOffset(guess, tz);
+    return guess - tzOffset(t, tz);
+  }
+  function clockIn(t, tz) { var p = zoneParts(t, tz); return pad2(p.H) + ':' + pad2(p.M); }
+  /* "14:30" (or "13:30" while US and UK clocks change on different dates) */
+  function usOpenUK(dateStr) { return clockIn(zonedToUtc(dateStr, 9, 30, 'America/New_York'), 'Europe/London'); }
+  function fmtInstantUK(ms) {
+    if (!isFinite(ms)) return '';
+    var d = dateInZone(ms, 'Europe/London');
+    return fmtDate(d) + ', ' + clockIn(ms, 'Europe/London');
+  }
+
+  /* ---------------- sorted-array search ---------------- */
+  function lowerBound(arr, x) { var lo = 0, hi = arr.length; while (lo < hi) { var mid = (lo + hi) >> 1; if (arr[mid] < x) lo = mid + 1; else hi = mid; } return lo; }
+  function upperBound(arr, x) { var lo = 0, hi = arr.length; while (lo < hi) { var mid = (lo + hi) >> 1; if (arr[mid] <= x) lo = mid + 1; else hi = mid; } return lo; }
+
+  /* ---------------- NYSE calendar (market/calendar.days) ---------------- */
+  function isTradingDay(days, d) { var i = lowerBound(days, d); return i < days.length && days[i] === d; }
+  function nextTradingDay(days, d, inclusive) {
+    var i = inclusive ? lowerBound(days, d) : upperBound(days, d);
+    return i < days.length ? days[i] : null;
+  }
+  /* day 0 = date itself if it is a trading day, else the next trading day in the list */
+  function tradingDayAfter(days, date, n) {
+    if (!days || !days.length || !isYMD(date) || date < days[0]) return null;
+    var i0 = lowerBound(days, date);
+    if (i0 >= days.length || i0 + n >= days.length) return null;
+    return days[i0 + n];
+  }
+  /* number of trading days d with a < d <= b */
+  function tradingDaysBetween(days, a, b) {
+    if (!days || !(b > a)) return 0;
+    return upperBound(days, b) - upperBound(days, a);
+  }
+  function approxTradingDays(a, b) { /* fallback without a calendar: weekdays a < d <= b */
+    var n = 0, d = a;
+    while (d < b) { d = addDays(d, 1); if (!isWeekend(d)) n++; }
+    return n;
+  }
+
+  /* ---------------- prices ---------------- */
+  function normSeries(doc) {
+    if (!doc || !Array.isArray(doc.dates) || !Array.isArray(doc.close)) return null;
+    var pairs = [];
+    var n = Math.min(doc.dates.length, doc.close.length);
+    for (var i = 0; i < n; i++) {
+      var d = doc.dates[i], c = doc.close[i];
+      if (isYMD(d) && typeof c === 'number' && isFinite(c) && c > 0) pairs.push([d, c]);
+    }
+    pairs.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+    var dates = [], close = [];
+    pairs.forEach(function (p) {
+      if (dates.length && dates[dates.length - 1] === p[0]) { close[close.length - 1] = p[1]; return; }
+      dates.push(p[0]); close.push(p[1]);
+    });
+    if (!dates.length) return null;
+    return { id: doc.id, ticker: doc.ticker, currency: doc.currency, kind: doc.kind, dates: dates, close: close };
+  }
+  /* last close on or before date; if none before, the first close after */
+  function priceOn(series, date) {
+    if (!series || !series.dates || !series.dates.length) return null;
+    var i = upperBound(series.dates, date) - 1;
+    return i >= 0 ? series.close[i] : series.close[0];
+  }
+  function lastDate(series) { return series && series.dates && series.dates.length ? series.dates[series.dates.length - 1] : null; }
+
+  /* ---------------- records ---------------- */
+  function cmpStr(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
+  function cleanTicker(s) { return String(s == null ? '' : s).trim().toUpperCase(); }
+  function cleanTrades(list) {
+    var out = [];
+    (list || []).forEach(function (t) {
+      if (!t || !isYMD(t.date)) return;
+      var type = t.type === 'buy' || t.type === 'sell' ? t.type : null;
+      var ticker = cleanTicker(t.ticker);
+      var shares = +t.shares, amt = +t.amount_gbp;
+      if (!type || !TICKER_RE.test(ticker) || !(shares > 0) || !(amt > 0) || !isFinite(shares) || !isFinite(amt)) return;
+      out.push({ id: t.id || '', date: t.date, type: type, ticker: ticker, shares: shares, amount_gbp: amt, note: typeof t.note === 'string' ? t.note : '', created_at: typeof t.created_at === 'string' ? t.created_at : '' });
+    });
+    out.sort(function (a, b) { return cmpStr(a.date, b.date) || cmpStr(a.created_at, b.created_at) || cmpStr(a.id, b.id); });
+    return out;
+  }
+  function cleanDeposits(list) {
+    var out = [];
+    (list || []).forEach(function (d) {
+      if (!d || !isYMD(d.date)) return;
+      var amt = +d.amount_gbp;
+      if (!isFinite(amt) || amt === 0) return;
+      out.push({ id: d.id || '', date: d.date, amount_gbp: amt, note: typeof d.note === 'string' ? d.note : '', created_at: typeof d.created_at === 'string' ? d.created_at : '' });
+    });
+    out.sort(function (a, b) { return cmpStr(a.date, b.date) || cmpStr(a.created_at, b.created_at) || cmpStr(a.id, b.id); });
+    return out;
+  }
+  function normSettings(s) {
+    s = s || {};
+    var fund = s.index_fund === 'EQQQ' ? 'EQQQ' : 'VUAG';
+    var slice = +s.slice;
+    if (!validSlice(slice)) slice = DEFAULTS.slice;
+    var monthly = +s.monthly_deposit;
+    if (!(monthly > 0)) monthly = DEFAULTS.monthly_deposit;
+    var dismissed = {};
+    if (s.dismissed && typeof s.dismissed === 'object') {
+      Object.keys(s.dismissed).forEach(function (k) { var t = cleanTicker(k); if (TICKER_RE.test(t)) dismissed[t] = String(s.dismissed[k] || 'Hidden'); });
+    }
+    return { index_fund: fund, slice: slice, monthly_deposit: monthly, dismissed: dismissed };
+  }
+
+  /* events in processing order: same date -> deposits, then sells, then buys */
+  var KIND_ORDER = { deposit: 0, sell: 1, buy: 2 };
+  function buildEvents(deposits, trades) {
+    var ev = [];
+    deposits.forEach(function (d) { ev.push({ date: d.date, kind: 'deposit', amount: d.amount_gbp, rec: d }); });
+    trades.forEach(function (t) { ev.push({ date: t.date, kind: t.type, amount: t.amount_gbp, ticker: t.ticker, shares: t.shares, rec: t }); });
+    ev.sort(function (a, b) {
+      return cmpStr(a.date, b.date) || (KIND_ORDER[a.kind] - KIND_ORDER[b.kind]) || cmpStr(a.rec.created_at, b.rec.created_at) || cmpStr(a.rec.id, b.rec.id);
+    });
+    return ev;
+  }
+
+  /* index pot: units of the index fund after each record date */
+  function indexPot(events, fund) {
+    var units = 0, timeline = [], warnings = [], negative = false, missing = false;
+    events.forEach(function (e) {
+      var p = priceOn(fund, e.date);
+      if (!p) { missing = true; return; }
+      if (e.kind === 'buy') units -= e.amount / p; else units += e.amount / p;
+      if (units < -1e-9 && !negative) {
+        negative = true;
+        warnings.push({ date: e.date, text: 'Your records spend more than the account held on ' + fmtDate(e.date, { year: true }) + '. Check for a missing deposit or a mistyped amount.' });
+      } else if (units >= -1e-9) negative = false;
+      var last = timeline[timeline.length - 1];
+      if (last && last.date === e.date) last.v = units; else timeline.push({ date: e.date, v: units });
+    });
+    return { units: units, timeline: timeline, warnings: warnings, missingPrice: missing };
+  }
+  function stepAt(timeline, date) {
+    var lo = 0, hi = timeline.length;
+    while (lo < hi) { var mid = (lo + hi) >> 1; if (timeline[mid].date <= date) lo = mid + 1; else hi = mid; }
+    return lo > 0 ? timeline[lo - 1].v : 0;
+  }
+  /* deposits only, converted into units of one fund (benchmarks) */
+  function benchTimeline(deposits, series) {
+    var units = 0, tl = [];
+    deposits.forEach(function (d) {
+      var p = priceOn(series, d.date);
+      if (!p) return;
+      units += d.amount_gbp / p;
+      var last = tl[tl.length - 1];
+      if (last && last.date === d.date) last.v = units; else tl.push({ date: d.date, v: units });
+    });
+    return tl;
+  }
+  function moneyInTimeline(deposits) {
+    var sum = 0, tl = [];
+    deposits.forEach(function (d) {
+      sum += d.amount_gbp;
+      var last = tl[tl.length - 1];
+      if (last && last.date === d.date) last.v = sum; else tl.push({ date: d.date, v: sum });
+    });
+    return tl;
+  }
+  function shareTimelines(events) {
+    var out = {};
+    events.forEach(function (e) {
+      if (e.kind === 'deposit') return;
+      var tl = out[e.ticker] || (out[e.ticker] = []);
+      var cur = tl.length ? tl[tl.length - 1].v : 0;
+      var v = cur + (e.kind === 'buy' ? e.shares : -e.shares);
+      if (Math.abs(v) < EPS) v = 0;
+      var last = tl[tl.length - 1];
+      if (last && last.date === e.date) last.v = v; else tl.push({ date: e.date, v: v });
+    });
+    return out;
+  }
+  function spinValueGBP(shares, usd, gbpusd) {
+    if (!(gbpusd > 0) || usd == null) return null;
+    return shares * usd / gbpusd;
+  }
+
+  /* ---------------- positions ---------------- */
+  function positions(trades) {
+    var byT = {};
+    trades.forEach(function (t) { (byT[t.ticker] || (byT[t.ticker] = [])).push(t); });
+    var out = [], warnings = [];
+    Object.keys(byT).sort().forEach(function (ticker) {
+      var list = byT[ticker];
+      var dates = [];
+      list.forEach(function (t) { if (dates[dates.length - 1] !== t.date) dates.push(t.date); });
+      var net = 0, cur = null;
+      dates.forEach(function (date) {
+        var buys = list.filter(function (t) { return t.date === date && t.type === 'buy'; });
+        var sells = list.filter(function (t) { return t.date === date && t.type === 'sell'; });
+        while (buys.length || sells.length) {
+          var t;
+          if (sells.length && (net > EPS || !buys.length)) t = sells.shift(); else t = buys.shift();
+          if (t.type === 'buy') {
+            if (!cur) { cur = { ticker: ticker, openDate: t.date, closeDate: null, buys: [], sells: [], cost: 0, proceeds: 0, boughtShares: 0, soldShares: 0, shares: 0, closed: false }; out.push(cur); }
+            cur.buys.push(t); cur.cost += t.amount_gbp; cur.boughtShares += t.shares; net += t.shares;
+          } else {
+            if (!cur) { warnings.push({ date: t.date, text: 'Sale of ' + ticker + ' on ' + fmtDate(t.date, { year: true }) + ' has no matching buy in your records.' }); continue; }
+            cur.sells.push(t); cur.proceeds += t.amount_gbp; cur.soldShares += t.shares; net -= t.shares;
+          }
+          cur.shares = net;
+          if (t.type === 'sell' && net <= EPS) {
+            if (net < -EPS) warnings.push({ date: t.date, text: 'Your records sell more ' + ticker + ' shares than you bought (' + fmtDate(t.date, { year: true }) + ').' });
+            cur.closed = true; cur.closeDate = t.date; cur.shares = 0; net = 0; cur = null;
+          }
+        }
+      });
+    });
+    return { list: out, warnings: warnings };
+  }
+  function sellDateFor(days, buyDate, fallback) {
+    var d = tradingDayAfter(days, buyDate, HOLD_DAYS);
+    if (d) return { date: d, source: 'calendar' };
+    if (isYMD(fallback)) return { date: fallback, source: 'pipeline' };
+    return { date: addDays(buyDate, 365), source: 'approx' };
+  }
+
+  /* ---------------- XIRR ---------------- */
+  /* flows: [{date, amount}] with money paid in negative and the final value positive. Returns annual rate or null. */
+  function xirr(flows) {
+    flows = (flows || []).filter(function (f) { return f && isYMD(f.date) && isFinite(f.amount) && f.amount !== 0; });
+    if (flows.length < 2) return null;
+    if (!flows.some(function (f) { return f.amount > 0; }) || !flows.some(function (f) { return f.amount < 0; })) return null;
+    var d0 = flows.reduce(function (m, f) { return f.date < m ? f.date : m; }, flows[0].date);
+    var ts = flows.map(function (f) { return daysBetween(d0, f.date) / 365; });
+    var as = flows.map(function (f) { return f.amount; });
+    function f(r) { var s = 0; for (var i = 0; i < as.length; i++) s += as[i] / Math.pow(1 + r, ts[i]); return s; }
+    function df(r) { var s = 0; for (var i = 0; i < as.length; i++) s -= ts[i] * as[i] / Math.pow(1 + r, ts[i] + 1); return s; }
+    var scale = as.reduce(function (m, a) { return Math.max(m, Math.abs(a)); }, 0);
+    var r = 0.1;
+    for (var k = 0; k < 60; k++) {
+      var fv = f(r), dv = df(r);
+      if (!isFinite(fv) || !isFinite(dv) || dv === 0) break;
+      var nr = r - fv / dv;
+      if (!isFinite(nr)) break;
+      if (nr <= -0.9999) nr = (r - 0.9999) / 2;
+      if (Math.abs(nr - r) < 1e-12) { r = nr; break; }
+      r = nr;
+    }
+    if (isFinite(r) && r > -0.9999 && Math.abs(f(r)) < 1e-7 * scale) return r;
+    var lo = -0.9999, hi = 1, flo = f(lo), fhi = f(hi);
+    while (flo * fhi > 0 && hi < 1e6) { hi *= 4; fhi = f(hi); }
+    if (!(flo * fhi <= 0)) return null;
+    for (var j = 0; j < 300; j++) {
+      var mid = (lo + hi) / 2, fm = f(mid);
+      if (fm === 0 || (hi - lo) / 2 < 1e-12) return mid;
+      if ((fm > 0) === (flo > 0)) { lo = mid; flo = fm; } else { hi = mid; }
+    }
+    return (lo + hi) / 2;
+  }
+
+  /* ---------------- funding plan ---------------- */
+  /* holdings: [{ticker, value, dueSell}]. Positions due to be sold today are sold first and their cash
+     goes toward the buys; the index fund covers the rest; if it can't, sell all of it and trim the
+     other spin-offs in proportion to their value. */
+  function fundingPlan(potValue, holdings, need, fundCode) {
+    potValue = Math.max(0, potValue || 0);
+    holdings = holdings || [];
+    var fromSales = holdings.filter(function (h) { return h.dueSell; }).reduce(function (s, h) { return s + Math.max(0, h.value || 0); }, 0);
+    var available = potValue + fromSales;
+    if (available + 0.005 >= need) {
+      return { mode: 'fund', fund: fundCode, need: need, potValue: potValue, fromSales: fromSales,
+        fundSell: Math.max(0, need - fromSales), fundBuy: Math.max(0, fromSales - need), trim: 0, trims: [], shortfall: 0 };
+    }
+    var others = holdings.filter(function (h) { return !h.dueSell && h.value > 0; });
+    var tot = others.reduce(function (s, h) { return s + h.value; }, 0);
+    var trim = need - available;
+    var shortfall = 0;
+    if (trim > tot) { shortfall = trim - tot; trim = tot; }
+    var trims = others.map(function (h) { return { ticker: h.ticker, amount: tot > 0 ? trim * h.value / tot : 0, value: h.value }; })
+      .sort(function (a, b) { return b.amount - a.amount || cmpStr(a.ticker, b.ticker); });
+    return { mode: 'trim', fund: fundCode, need: need, potValue: potValue, fromSales: fromSales, fundSell: potValue, fundBuy: 0, trim: trim, trims: trims, shortfall: shortfall };
+  }
+
+  /* ---------------- the whole picture ---------------- */
+  /* input: {today, nowMs, market:{status,pipeline,calendar}, prices:{ID:doc}, checks:{CIK:doc}, trades:[...], deposits:[...], settings:{} } */
+  function computeAll(input) {
+    input = input || {};
+    var today = input.today;
+    var market = input.market || {};
+    var st = normSettings(input.settings);
+    var calDoc = market.calendar || null;
+    var days = calDoc && Array.isArray(calDoc.days) ? calDoc.days.filter(isYMD).slice().sort() : [];
+    var prices = {};
+    Object.keys(input.prices || {}).forEach(function (k) { var s = normSeries(input.prices[k]); if (s) prices[k] = s; });
+    var trades = cleanTrades(input.trades);
+    var deposits = cleanDeposits(input.deposits);
+    var pipeline = (market.pipeline && Array.isArray(market.pipeline.items) ? market.pipeline.items : []).filter(function (it) { return it && typeof it === 'object'; });
+    var checks = input.checks || {};
+    var status = market.status || null;
+    var fundCode = st.index_fund;
+    var fund = prices[fundCode] || null;
+    var vuag = prices.VUAG || null, eqqq = prices.EQQQ || null, fx = prices.GBPUSD || null;
+    var warnings = [];
+
+    var tradeDay = days.length ? (nextTradingDay(days, today, true) || today) : nextWeekday(today);
+    function nextWeekday(d) { while (isWeekend(d)) d = addDays(d, 1); return d; }
+
+    /* ---- valuation ---- */
+    var events = buildEvents(deposits, trades);
+    var pot = indexPot(events, fund);
+    warnings = warnings.concat(pot.warnings);
+    if (events.length && !fund) warnings.push({ text: 'No ' + fundCode + ' prices yet, so your index fund can’t be valued. They arrive with the next daily check.' });
+    if (events.length && pot.missingPrice && fund) warnings.push({ text: 'Some records are older than the ' + fundCode + ' price history.' });
+    var sharesTL = shareTimelines(events);
+    var avgCost = {};
+    trades.forEach(function (t) {
+      if (t.type !== 'buy') return;
+      var a = avgCost[t.ticker] || (avgCost[t.ticker] = { gbp: 0, sh: 0 });
+      a.gbp += t.amount_gbp; a.sh += t.shares;
+    });
+    var noPrice = {};
+    function spinsOn(date) {
+      var rate = priceOn(fx, date);
+      var out = [];
+      Object.keys(sharesTL).forEach(function (tk) {
+        var sh = stepAt(sharesTL[tk], date);
+        if (!(sh > EPS)) return;
+        var usd = priceOn(prices[tk], date);
+        var v = spinValueGBP(sh, usd, rate);
+        var estimated = false;
+        if (v == null) { var a = avgCost[tk]; v = a && a.sh > 0 ? sh * a.gbp / a.sh : 0; estimated = true; noPrice[tk] = true; }
+        out.push({ ticker: tk, shares: sh, usd: usd, fx: rate, value: v, estimated: estimated });
+      });
+      return out;
+    }
+    function potOn(date) { var p = priceOn(fund, date); return p ? stepAt(pot.timeline, date) * p : 0; }
+    function accountOn(date) {
+      var s = spinsOn(date);
+      var pv = potOn(date);
+      return { total: pv + s.reduce(function (a, b) { return a + b.value; }, 0), pot: pv, spins: s };
+    }
+
+    var firstDate = events.length ? events[0].date : null;
+    var lastRecord = events.length ? events[events.length - 1].date : null;
+    var asOf = null;
+    if (firstDate) {
+      asOf = lastDate(fund) || lastRecord;
+      if (status && isYMD(status.last_market_day) && status.last_market_day > asOf) asOf = status.last_market_day;
+      if (lastRecord > asOf) asOf = lastRecord;
+      if (today && asOf > today) asOf = today;
+      if (asOf < firstDate) asOf = firstDate;
+    }
+
+    var series = null;
+    if (firstDate) {
+      var sd = [firstDate];
+      var src = fund || vuag || eqqq;
+      if (src) src.dates.forEach(function (d) { if (d > firstDate && d <= asOf) sd.push(d); });
+      if (sd[sd.length - 1] !== asOf) sd.push(asOf);
+      var spTL = benchTimeline(deposits, vuag), nqTL = benchTimeline(deposits, eqqq), inTL = moneyInTimeline(deposits);
+      series = { dates: sd, account: [], sp: [], nq: [], moneyIn: [] };
+      sd.forEach(function (d) {
+        series.account.push(fund ? accountOn(d).total : null);
+        series.sp.push(vuag ? stepAt(spTL, d) * priceOn(vuag, d) : null);
+        series.nq.push(eqqq ? stepAt(nqTL, d) * priceOn(eqqq, d) : null);
+        series.moneyIn.push(stepAt(inTL, d));
+      });
+    }
+
+    var nowAcc = asOf && fund ? accountOn(asOf) : { total: null, pot: null, spins: [] };
+    Object.keys(noPrice).forEach(function (tk) { warnings.push({ text: 'No price for ' + tk + ' yet, so it is valued at what you paid until the next daily check.' }); });
+
+    /* ---- headline ---- */
+    var head = null;
+    if (series) {
+      var n = series.dates.length - 1;
+      var moneyIn = series.moneyIn[n];
+      var annual = deposits.length && today && daysBetween(deposits[0].date, today) >= 365;
+      var flowsBase = deposits.map(function (d) { return { date: d.date, amount: -d.amount_gbp }; });
+      var mk = function (val) {
+        if (val == null) return null;
+        var gain = val - moneyIn;
+        return {
+          value: val, moneyIn: moneyIn, gain: gain,
+          gainPct: moneyIn > 0 ? gain / moneyIn : null,
+          xirr: annual ? xirr(flowsBase.concat([{ date: asOf, amount: val }])) : null
+        };
+      };
+      head = {
+        asOf: asOf, annualised: !!annual, firstDeposit: deposits.length ? deposits[0].date : null,
+        you: mk(series.account[n]), sp: mk(series.sp[n]), nq: mk(series.nq[n])
+      };
+      head.vsSP = head.you && head.sp ? head.you.value - head.sp.value : null;
+      head.vsNQ = head.you && head.nq ? head.you.value - head.nq.value : null;
+    }
+
+    /* ---- positions ---- */
+    var pos = positions(trades);
+    warnings = warnings.concat(pos.warnings);
+    var byTicker = {};
+    pipeline.forEach(function (it) { if (it.ticker) { var t = cleanTicker(it.ticker); (byTicker[t] || (byTicker[t] = [])).push(it); } });
+    function pipeFor(tk, onOrBefore) {
+      var list = byTicker[tk] || [], best = null;
+      list.forEach(function (it) {
+        var ft = it.first_trade || '';
+        if (onOrBefore && ft && ft > onOrBefore) return;
+        if (!best || ft > (best.first_trade || '')) best = it;
+      });
+      return best || list[0] || null;
+    }
+    var vuagNow = vuag ? priceOn(vuag, asOf || today) : null;
+    var open = [], closed = [];
+    pos.list.forEach(function (p) {
+      var item = pipeFor(p.ticker, p.openDate);
+      var company = item && item.company ? String(item.company) : '';
+      if (!p.closed) {
+        var held = nowAcc.spins.filter(function (s) { return s.ticker === p.ticker; })[0];
+        var value = held ? held.value : (avgCost[p.ticker] ? p.shares * avgCost[p.ticker].gbp / avgCost[p.ticker].sh : 0);
+        var sell = sellDateFor(days, p.openDate, item && item.model_sell_date);
+        var left = days.length && sell.source === 'calendar' ? tradingDaysBetween(days, today, sell.date) : approxTradingDays(today, sell.date);
+        var elapsed = days.length ? tradingDaysBetween(days, p.openDate, sell.date < today ? sell.date : today) : approxTradingDays(p.openDate, today);
+        var lastUsd = prices[p.ticker] ? priceOn(prices[p.ticker], asOf || today) : null;
+        open.push({
+          ticker: p.ticker, company: company, item: item, openDate: p.openDate, shares: p.shares, cost: p.cost, proceeds: p.proceeds,
+          value: value, estimated: !held || held.estimated, lastUsd: lastUsd,
+          ret: p.cost > 0 ? (value + p.proceeds - p.cost) / p.cost : null,
+          spRet: vuag ? vuagNow / priceOn(vuag, p.openDate) - 1 : null,
+          sellDate: sell.date, sellSource: sell.source, daysLeft: sell.date <= today ? 0 : left,
+          elapsed: elapsed, progress: Math.max(0, Math.min(1, elapsed / HOLD_DAYS)), due: sell.date <= today, overdue: sell.date < today,
+          buys: p.buys, sells: p.sells
+        });
+      } else {
+        var ret = p.cost > 0 ? (p.proceeds - p.cost) / p.cost : null;
+        var spRet = vuag ? priceOn(vuag, p.closeDate) / priceOn(vuag, p.openDate) - 1 : null;
+        closed.push({
+          ticker: p.ticker, company: company, openDate: p.openDate, closeDate: p.closeDate, cost: p.cost, proceeds: p.proceeds,
+          ret: ret, spRet: spRet, excess: ret != null && spRet != null ? ret - spRet : null, daysHeld: daysBetween(p.openDate, p.closeDate)
+        });
+      }
+    });
+    open.sort(function (a, b) { return cmpStr(a.sellDate, b.sellDate) || cmpStr(a.ticker, b.ticker); });
+    closed.sort(function (a, b) { return cmpStr(b.closeDate, a.closeDate) || cmpStr(a.ticker, b.ticker); });
+    var stats = null;
+    if (closed.length) {
+      var wins = closed.filter(function (c) { return c.ret > 0; }).length;
+      var withEx = closed.filter(function (c) { return c.excess != null; });
+      stats = {
+        n: closed.length, wins: wins, winRate: wins / closed.length,
+        avgRet: closed.reduce(function (s, c) { return s + c.ret; }, 0) / closed.length,
+        avgExcess: withEx.length ? withEx.reduce(function (s, c) { return s + c.excess; }, 0) / withEx.length : null,
+        beat: withEx.filter(function (c) { return c.excess > 0; }).length,
+        totalGain: closed.reduce(function (s, c) { return s + c.proceeds - c.cost; }, 0)
+      };
+    }
+
+    /* ---- buy candidates and pipeline groups ---- */
+    var openByT = {};
+    open.forEach(function (p) { openByT[p.ticker] = p; });
+    function boughtSince(tk, firstTrade) {
+      if (openByT[tk]) return true;
+      return trades.some(function (t) { return t.type === 'buy' && t.ticker === tk && (!firstTrade || t.date >= firstTrade); });
+    }
+    var groups = { open: [], coming: [], waiting: [], missed: [] };
+    var candidates = [];
+    pipeline.forEach(function (raw) {
+      var tk = raw.ticker ? cleanTicker(raw.ticker) : null;
+      var chk = checks[String(raw.id)] || null;
+      var genuine = chk ? chk.genuine : undefined;
+      var it = { raw: raw, id: String(raw.id || ''), ticker: tk, company: raw.company ? String(raw.company) : (tk || 'Unnamed company'), status: raw.status, check: chk };
+      if (tk && boughtSince(tk, raw.first_trade)) { it.mine = true; return; }
+      var dismissed = tk && st.dismissed[tk];
+      var inWindow = isYMD(raw.buy_date) && isYMD(raw.buy_window_end) && raw.buy_date <= today && today <= raw.buy_window_end;
+      var excl = null;
+      if (genuine === false) excl = 'Not a genuine spin-off' + (chk && chk.note ? ': ' + chk.note : '');
+      else if (dismissed) excl = 'You hid it: ' + dismissed;
+      if (tk && !excl && ((raw.status === 'BUY' && (inWindow || !isYMD(raw.buy_window_end))) || (raw.status === 'watch' && inWindow))) {
+        it.pending = raw.status === 'watch';
+        candidates.push(it);
+        groups.open.push(it);
+        return;
+      }
+      if (!excl && raw.status === 'watch' && isYMD(raw.buy_date) && raw.buy_date > today) { groups.coming.push(it); return; }
+      if (!excl && raw.status === 'waiting') { groups.waiting.push(it); return; }
+      if (raw.status === 'waiting' && excl) { it.reason = excl; groups.missed.push(it); return; }
+      it.reason = excl || ({
+        skip: 'Failed the $1 price or $100K daily volume check',
+        not_new: 'Not a new listing',
+        HOLD: 'Buy window passed',
+        SELL: 'Buy window passed',
+        done: 'Buy window passed',
+        BUY: 'Buy window passed',
+        watch: 'Buy window passed'
+      })[raw.status] || 'Not bought';
+      groups.missed.push(it);
+    });
+    function recentKey(it) { var r = it.raw; return r.buy_window_end || r.buy_date || r.first_trade || r.form10_date || ''; }
+    groups.open.sort(function (a, b) { return cmpStr(a.raw.buy_window_end || '', b.raw.buy_window_end || '') || cmpStr(a.ticker || '', b.ticker || ''); });
+    groups.coming.sort(function (a, b) { return cmpStr(a.raw.buy_date, b.raw.buy_date) || cmpStr(a.ticker || '', b.ticker || ''); });
+    groups.waiting.sort(function (a, b) { return cmpStr(b.raw.form10_date || '', a.raw.form10_date || '') || cmpStr(a.company, b.company); });
+    groups.missed.sort(function (a, b) { return cmpStr(recentKey(b), recentKey(a)) || cmpStr(a.company, b.company); });
+
+    /* ---- slice + funding ---- */
+    var accountNow = nowAcc.total;
+    /* exposure: share of the account in spin-offs right now */
+    var spinValue = nowAcc.spins.reduce(function (a, b) { return a + b.value; }, 0);
+    var spinShare = accountNow != null && accountNow > 0 ? Math.max(0, Math.min(1, spinValue / accountNow)) : null;
+    var sliceAmount = accountNow != null && accountNow > 0 ? accountNow / st.slice : null;
+    var dueSet = {};
+    open.forEach(function (p) { if (p.due) dueSet[p.ticker] = true; });
+    var plan = null;
+    if (candidates.length && sliceAmount != null) {
+      var holdings = open.map(function (p) { return { ticker: p.ticker, value: p.value, dueSell: !!dueSet[p.ticker] }; });
+      plan = fundingPlan(nowAcc.pot, holdings, sliceAmount * candidates.length, fundCode);
+    }
+
+    /* ---- today's actions ---- */
+    var openUK = isYMD(tradeDay) ? usOpenUK(tradeDay) : '14:30';
+    var actions = [];
+    open.filter(function (p) { return p.due; }).forEach(function (p) {
+      actions.push({ kind: 'sell', ticker: p.ticker, company: p.company, position: p, sellDate: p.sellDate, overdue: p.overdue, shares: p.shares, tradeDay: tradeDay, openUK: openUK });
+    });
+    candidates.forEach(function (it) {
+      var r = it.raw;
+      var day = tradeDay;
+      actions.push({
+        kind: 'buy', ticker: it.ticker, company: it.company, item: it, pending: !!it.pending, check: it.check,
+        amount: sliceAmount, plan: plan, count: candidates.length, buyDate: r.buy_date || null, windowEnd: r.buy_window_end || null,
+        lastDay: r.buy_window_end ? r.buy_window_end <= day : false, tradeDay: day, openUK: openUK
+      });
+    });
+    actions.sort(function (a, b) {
+      if (a.kind !== b.kind) return a.kind === 'sell' ? -1 : 1;
+      if (a.kind === 'sell') return cmpStr(a.sellDate, b.sellDate) || cmpStr(a.ticker, b.ticker);
+      return cmpStr(a.windowEnd || '9999', b.windowEnd || '9999') || cmpStr(a.buyDate || '', b.buyDate || '') || cmpStr(a.ticker, b.ticker);
+    });
+
+    /* ---- coming up ---- */
+    var coming = [];
+    groups.coming.forEach(function (it) {
+      coming.push({ kind: 'buy', date: it.raw.buy_date, ticker: it.ticker, company: it.company, windowEnd: it.raw.buy_window_end || null,
+        tradingDays: days.length ? tradingDaysBetween(days, today, it.raw.buy_date) : approxTradingDays(today, it.raw.buy_date) });
+    });
+    open.forEach(function (p) {
+      if (p.sellDate > today) coming.push({ kind: 'sell', date: p.sellDate, ticker: p.ticker, company: p.company, tradingDays: p.daysLeft });
+    });
+    coming.sort(function (a, b) { return cmpStr(a.date, b.date) || (a.kind === b.kind ? 0 : a.kind === 'sell' ? -1 : 1) || cmpStr(a.ticker, b.ticker); });
+
+    /* ---- data health ---- */
+    var health = { hasData: !!status, hasCalendar: days.length > 0 };
+    if (status) {
+      var gen = Date.parse(status.generated_at);
+      health.generatedAt = isFinite(gen) ? gen : null;
+      health.ageDays = isFinite(gen) && input.nowMs ? (input.nowMs - gen) / 86400000 : null;
+      health.stale = health.ageDays != null && health.ageDays > 4;
+      health.lastMarketDay = isYMD(status.last_market_day) ? status.last_market_day : null;
+      health.scanOk = status.scan_ok !== false;
+      health.errors = Array.isArray(status.errors) ? status.errors.filter(function (e) { return typeof e === 'string' && e; }) : [];
+      health.triggerId = typeof status.trigger_id === 'string' && status.trigger_id ? status.trigger_id : null;
+      health.nextCheck = typeof status.next_check === 'string' ? status.next_check : '';
+      health.todayNY = status.today_ny || null;
+    }
+
+    /* ---- deposit reminder ---- */
+    var thisMonth = today ? monthKey(input.todayUK || today) : null;
+    var depositThisMonth = deposits.some(function (d) { return d.amount_gbp > 0 && monthKey(d.date) === thisMonth; });
+
+    return {
+      today: today, tradeDay: tradeDay, isTradingDay: days.length ? isTradingDay(days, today) : !isWeekend(today), openUK: openUK,
+      settings: st, fundCode: fundCode, asOf: asOf, series: series, head: head,
+      account: { value: accountNow, pot: nowAcc.pot, potUnits: pot.units, spins: nowAcc.spins, spinValue: spinValue, spinShare: spinShare },
+      risk: riskLevel(st.slice),
+      open: open, closed: closed, stats: stats, sliceAmount: sliceAmount, plan: plan,
+      actions: actions, coming: coming, groups: groups, health: health, warnings: warnings,
+      hasRecords: events.length > 0, hasDeposits: deposits.length > 0, deposits: deposits, trades: trades,
+      depositThisMonth: depositThisMonth, lastDeposit: deposits.length ? deposits[deposits.length - 1] : null
+    };
+  }
+
+  /* ---------------- formatting ---------------- */
+  var MINUS = '−';
+  function groupDigits(s) { return s.replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+  function fmtMoney(x, opt) {
+    opt = opt || {};
+    if (x == null || !isFinite(x)) return '–';
+    var dp = opt.dp != null ? opt.dp : 2;
+    var sym = opt.sym != null ? opt.sym : '£';
+    var r = Math.abs(x) < 0.5 * Math.pow(10, -dp) ? 0 : x;
+    var parts = Math.abs(r).toFixed(dp).split('.');
+    var body = sym + groupDigits(parts[0]) + (parts[1] ? '.' + parts[1] : '');
+    if (r < 0) return MINUS + body;
+    if (opt.sign && r > 0) return '+' + body;
+    return body;
+  }
+  function fmtPct(x, opt) {
+    opt = opt || {};
+    if (x == null || !isFinite(x)) return '–';
+    var dp = opt.dp != null ? opt.dp : 1;
+    var v = x * 100;
+    if (Math.abs(v) < 0.5 * Math.pow(10, -dp)) v = 0;
+    var s = Math.abs(v).toFixed(dp) + '%';
+    if (v < 0) return MINUS + s;
+    return (opt.sign !== false && v > 0 ? '+' : '') + s;
+  }
+  function fmtPts(x) { /* difference of two returns, in percentage points */
+    if (x == null || !isFinite(x)) return '–';
+    var v = x * 100; if (Math.abs(v) < 0.05) v = 0;
+    return (v < 0 ? MINUS : v > 0 ? '+' : '') + Math.abs(v).toFixed(1) + ' pts';
+  }
+  function fmtShares(x) {
+    if (x == null || !isFinite(x)) return '–';
+    var s = (Math.round(x * 1e6) / 1e6).toFixed(6).replace(/\.?0+$/, '');
+    var p = s.split('.');
+    return groupDigits(p[0]) + (p[1] ? '.' + p[1] : '');
+  }
+  function fmtCompact(x) {
+    if (x == null || !isFinite(x)) return '–';
+    var a = Math.abs(x), s;
+    if (a >= 1e6) s = (a / 1e6).toFixed(a >= 1e7 ? 1 : 2).replace(/\.?0+$/, '') + 'm';
+    else if (a >= 1e3) s = (a / 1e3).toFixed(a >= 1e5 ? 0 : 1).replace(/\.0$/, '') + 'k';
+    else s = a.toFixed(0);
+    return (x < 0 ? MINUS : '') + '£' + s;
+  }
+  function parseAmount(s) {
+    if (typeof s === 'number') return s;
+    s = String(s == null ? '' : s).replace(/[£$,\s]/g, '').replace(/−/g, '-');
+    if (!/^-?(\d+\.?\d*|\.\d+)$/.test(s)) return NaN;
+    return parseFloat(s);
+  }
+
+  /* ---------------- input validation ---------------- */
+  function validateTrade(inp, maxDate) {
+    var errors = {};
+    var date = String(inp.date || '');
+    if (!isYMD(date)) errors.date = 'Enter the trade date.';
+    else if (maxDate && date > maxDate) errors.date = 'The date can’t be in the future.';
+    var type = inp.type === 'sell' ? 'sell' : inp.type === 'buy' ? 'buy' : null;
+    if (!type) errors.type = 'Choose buy or sell.';
+    var ticker = cleanTicker(inp.ticker);
+    if (!ticker) errors.ticker = 'Enter the ticker, for example CLDR.';
+    else if (!TICKER_RE.test(ticker)) errors.ticker = 'Use letters, digits, dots and dashes only.';
+    var shares = parseAmount(inp.shares);
+    if (!(shares > 0)) errors.shares = 'Enter the number of shares (more than 0).';
+    var amt = parseAmount(inp.amount_gbp);
+    if (!(amt > 0)) errors.amount_gbp = 'Enter the amount in pounds (more than 0).';
+    var ok = !Object.keys(errors).length;
+    return { ok: ok, errors: errors, value: ok ? { date: date, type: type, ticker: ticker, shares: shares, amount_gbp: Math.round(amt * 100) / 100, note: String(inp.note || '').trim().slice(0, 200) } : null };
+  }
+  function validateDeposit(inp, maxDate) {
+    var errors = {};
+    var date = String(inp.date || '');
+    if (!isYMD(date)) errors.date = 'Enter the date.';
+    else if (maxDate && date > maxDate) errors.date = 'The date can’t be in the future.';
+    var amt = parseAmount(inp.amount);
+    if (!(amt > 0)) errors.amount = 'Enter an amount in pounds (more than 0).';
+    var ok = !Object.keys(errors).length;
+    var signed = ok ? Math.round(amt * 100) / 100 * (inp.kind === 'out' ? -1 : 1) : null;
+    return { ok: ok, errors: errors, value: ok ? { date: date, amount_gbp: signed, note: String(inp.note || '').trim().slice(0, 200) } : null };
+  }
+
+  /* ---------------- CSV ---------------- */
+  function csvCell(v) {
+    var s = v == null ? '' : String(v);
+    if (/^[=+\-@\t\r]/.test(s) && !/^-?\d/.test(s)) s = "'" + s;
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function recordsCSV(deposits, trades) {
+    var rows = [['record', 'date', 'type', 'ticker', 'shares', 'amount_gbp', 'note', 'created_at']];
+    cleanDeposits(deposits).forEach(function (d) { rows.push(['deposit', d.date, d.amount_gbp < 0 ? 'withdrawal' : 'deposit', '', '', d.amount_gbp.toFixed(2), d.note, d.created_at]); });
+    cleanTrades(trades).forEach(function (t) { rows.push(['trade', t.date, t.type, t.ticker, String(t.shares), t.amount_gbp.toFixed(2), t.note, t.created_at]); });
+    return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n') + '\r\n';
+  }
+
+  root.SpinLogic = {
+    HOLD_DAYS: HOLD_DAYS, DEFAULTS: DEFAULTS, FUNDS: FUNDS, TICKER_RE: TICKER_RE,
+    SLICE_MIN: SLICE_MIN, SLICE_MAX: SLICE_MAX, RISK_LEVELS: RISK_LEVELS, riskLevel: riskLevel, validSlice: validSlice,
+    isYMD: isYMD, parseYMD: parseYMD, toYMD: toYMD, addDays: addDays, daysBetween: daysBetween, weekdayOf: weekdayOf, isWeekend: isWeekend,
+    monthKey: monthKey, monthName: monthName, fmtDate: fmtDate, todayNY: todayNY, todayLondon: todayLondon, zonedToUtc: zonedToUtc,
+    usOpenUK: usOpenUK, fmtInstantUK: fmtInstantUK,
+    isTradingDay: isTradingDay, nextTradingDay: nextTradingDay, tradingDayAfter: tradingDayAfter, tradingDaysBetween: tradingDaysBetween,
+    normSeries: normSeries, priceOn: priceOn, cleanTrades: cleanTrades, cleanDeposits: cleanDeposits, normSettings: normSettings,
+    buildEvents: buildEvents, indexPot: indexPot, stepAt: stepAt, benchTimeline: benchTimeline, spinValueGBP: spinValueGBP,
+    positions: positions, sellDateFor: sellDateFor, xirr: xirr, fundingPlan: fundingPlan, computeAll: computeAll,
+    fmtMoney: fmtMoney, fmtPct: fmtPct, fmtPts: fmtPts, fmtShares: fmtShares, fmtCompact: fmtCompact, parseAmount: parseAmount,
+    cleanTicker: cleanTicker, validateTrade: validateTrade, validateDeposit: validateDeposit, recordsCSV: recordsCSV
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<!-- ===================== end SPIN-LOGIC ===================== -->
+
+<script id="spin-ui">
+(function () {
+  'use strict';
+  var L = window.SpinLogic;
+  var COLLECTIONS = ['market', 'prices', 'checks', 'trades', 'deposits', 'settings'];
+  var TABS = ['today', 'performance', 'spinoffs', 'records'];
+  var SEC_EDGAR = 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=10-12B&CIK=';
+
+  var S = {
+    phase: 'loading', /* loading | ready | absent */
+    db: null, user: null, canWrite: null, readOnly: false, downloads: null, mcp: null,
+    data: { market: {}, prices: {}, checks: {}, trades: {}, deposits: {}, settings: {} },
+    loaded: {}, subErr: {},
+    tab: 'today', openKeys: {}, pendingDelete: null, showAll: {},
+    check: { state: 'idle', msg: '' }, D: null, dirty: true
+  };
+
+  /* ---------- tiny DOM helpers (all untrusted text goes through textContent) ---------- */
+  function $(id) { return document.getElementById(id); }
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v == null || v === false) return;
+      if (k === 'class') el.className = v;
+      else if (k === 'text') el.textContent = v;
+      else if (k.slice(0, 2) === 'on' && typeof v === 'function') el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? '' : v);
+    });
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i]);
+    return el;
+  }
+  function add(el, c) {
+    if (c == null || c === false) return;
+    if (Array.isArray(c)) { c.forEach(function (x) { add(el, x); }); return; }
+    el.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(String(c)) : c);
+  }
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function sv(tag, attrs) {
+    var el = document.createElementNS(SVGNS, tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) { if (attrs[k] != null) el.setAttribute(k, attrs[k]); });
+    for (var i = 2; i < arguments.length; i++) { var c = arguments[i]; if (c == null) continue; el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); }
+    return el;
+  }
+  function fill(id, nodes) { var el = $(id); if (!el) return; el.textContent = ''; add(el, nodes); }
+  function icon(name) {
+    var P = {
+      up: 'M4 12L12 4M6 4h6v6', down: 'M4 4l8 8M12 6v6H6', check: 'M3.5 8.5l3 3 6-7', clock: 'M8 4.5V8l2.5 1.5M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0z',
+      alert: 'M8 5.5v3.5M8 11.2v.3M7.1 2.6L1.6 12.2A1 1 0 0 0 2.5 13.7h11a1 1 0 0 0 .9-1.5L8.9 2.6a1 1 0 0 0-1.8 0z', info: 'M8 7.5v4M8 5v.3M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0z',
+      ext: 'M9 3h4v4M13 3L7.5 8.5M11 9.5V13H3V5h3.5', q: 'M6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.1v.4M8 11.3v.2M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0z', x: 'M4 4l8 8M12 4l-8 8'
+    };
+    return sv('svg', { viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.6', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, sv('path', { d: P[name] }));
+  }
+  function money(x, opt) { return L.fmtMoney(x, opt); }
+  function signed(x, dp) { return L.fmtMoney(x, { sign: true, dp: dp == null ? 0 : dp }); }
+  function cls(x) { return x == null || !isFinite(x) || Math.abs(x) < 1e-9 ? '' : x > 0 ? 'pos' : 'neg'; }
+  function store(get, key, val) { try { return get ? localStorage.getItem(key) : localStorage.setItem(key, val); } catch (e) { return null; } }
+  function nowMs() { return Date.now(); }
+  function todayNY() { return L.todayNY(nowMs()); }
+  function todayUK() { return L.todayLondon(nowMs()); }
+  function maxRecordDate() { var a = todayNY(), b = todayUK(); return a > b ? a : b; }
+  function fundCode() { return S.D ? S.D.fundCode : 'VUAG'; }
+  function tickEl(t) { return h('span', { class: 'tick', text: t }); }
+  function secLink(url, cik) {
+    var href = typeof url === 'string' && /^https:\/\//.test(url) ? url : (cik && /^\d+$/.test(cik) ? SEC_EDGAR + cik : null);
+    return href ? h('a', { href: href, target: '_blank', rel: 'noopener' }, 'Form 10', icon('ext')) : null;
+  }
+
+  /* ---------- toasts ---------- */
+  function toast(msg, opt) {
+    opt = opt || {};
+    var box = $('toasts');
+    var t = h('div', { class: 'toast' + (opt.bad ? ' toast--bad' : ''), role: opt.bad ? 'alert' : 'status' }, h('span', { text: msg }));
+    if (opt.undo) t.appendChild(h('button', { type: 'button', text: 'Undo', onclick: function () { t.remove(); opt.undo(); } }));
+    t.appendChild(h('button', { type: 'button', 'aria-label': 'Dismiss', onclick: function () { t.remove(); } }, icon('x')));
+    box.appendChild(t);
+    while (box.children.length > 3) box.removeChild(box.firstChild);
+    setTimeout(function () { t.remove(); }, opt.ms || (opt.undo ? 9000 : 5000));
+  }
+
+  /* ---------- writes ---------- */
+  var writeChain = {};
+  function dbErrorText(e, what) {
+    var code = e && e.code;
+    if (code === 'quota_exceeded') return 'The tracker’s storage is full, so ' + what + ' wasn’t saved. Delete some old records and try again.';
+    if (code === 'invalid_argument' || code === 'transform_error') return what.charAt(0).toUpperCase() + what.slice(1) + ' was refused. You may only have view access to this tracker.';
+    if (code === 'resource_exhausted') return 'Too many changes at once. Wait a few seconds and try again.';
+    if (code === 'revoked' || code === 'not_granted' || code === 'capability_disabled' || code === 'capability_removed') return 'Saving isn’t available in this view. Open the tracker in claude.ai to make changes.';
+    return 'Couldn’t save ' + what + ' just now. Check your connection and try again.';
+  }
+  function write(key, fn, what) {
+    var prev = writeChain[key] || Promise.resolve();
+    var p = prev.catch(function () {}).then(function () {
+      return fn().catch(function (e) {
+        if (e && e.code === 'unavailable') return new Promise(function (res) { setTimeout(res, 600 + Math.random() * 900); }).then(fn);
+        throw e;
+      });
+    });
+    writeChain[key] = p;
+    return p.catch(function (e) {
+      if (e && (e.code === 'invalid_argument') && S.canWrite === null) { S.readOnly = true; invalidate(); }
+      toast(dbErrorText(e, what), { bad: true });
+      throw e;
+    });
+  }
+  function canWrite() { return S.db && !S.readOnly && S.canWrite !== false; }
+  function nowISO() { return new Date(nowMs()).toISOString(); }
+
+  function addTrade(v) {
+    var ref = S.db.collection('trades').doc();
+    var body = { date: v.date, type: v.type, ticker: v.ticker, shares: v.shares, amount_gbp: v.amount_gbp, note: v.note || '', created_at: nowISO() };
+    return write('trades/' + ref.id, function () { return ref.set(body); }, 'the trade').then(function () { return ref; });
+  }
+  function addDeposit(v) {
+    var ref = S.db.collection('deposits').doc();
+    var body = { date: v.date, amount_gbp: v.amount_gbp, note: v.note || '', created_at: nowISO() };
+    return write('deposits/' + ref.id, function () { return ref.set(body); }, 'the deposit').then(function () { return ref; });
+  }
+  function removeDoc(col, id, what) {
+    var ref = S.db.collection(col).doc(id);
+    return write(col + '/' + id, function () { return ref.delete(); }, what);
+  }
+  function currentSettings() {
+    var raw = S.data.settings.main || {};
+    var n = L.normSettings(raw);
+    return { index_fund: n.index_fund, slice: n.slice, monthly_deposit: n.monthly_deposit, dismissed: Object.assign({}, n.dismissed) };
+  }
+  function saveSettings(mut, what) {
+    var next = currentSettings();
+    mut(next);
+    return write('settings/main', function () { return S.db.collection('settings').doc('main').set(next); }, what || 'your settings');
+  }
+
+  /* ---------- tabs ---------- */
+  function setTab(name, focus) {
+    if (TABS.indexOf(name) < 0) name = 'today';
+    S.tab = name;
+    TABS.forEach(function (t) {
+      var b = $('tab-' + t), p = $('panel-' + t);
+      var on = t === name;
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+      p.hidden = !on;
+    });
+    if (focus) $('tab-' + name).focus();
+    store(false, 'spin.tab', name);
+    try { if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name); } catch (e) {}
+    if (name === 'performance') drawChartSoon();
+  }
+  function initTabs() {
+    TABS.forEach(function (t, i) {
+      var b = $('tab-' + t);
+      b.addEventListener('click', function () { setTab(t); });
+      b.addEventListener('keydown', function (e) {
+        var j = null;
+        if (e.key === 'ArrowRight') j = (i + 1) % TABS.length; else if (e.key === 'ArrowLeft') j = (i + TABS.length - 1) % TABS.length;
+        else if (e.key === 'Home') j = 0; else if (e.key === 'End') j = TABS.length - 1;
+        if (j != null) { e.preventDefault(); setTab(TABS[j], true); }
+      });
+    });
+    var fromHash = (location.hash || '').replace('#', '');
+    var initial = TABS.indexOf(fromHash) >= 0 ? fromHash : (store(true, 'spin.tab') || 'today');
+    setTab(TABS.indexOf(initial) >= 0 ? initial : 'today');
+    window.addEventListener('hashchange', function () { var t = (location.hash || '').replace('#', ''); if (TABS.indexOf(t) >= 0 && t !== S.tab) setTab(t); });
+  }
+
+  /* ---------- compute + render ---------- */
+  var raf = 0;
+  function invalidate() { S.dirty = true; if (!raf) raf = requestAnimationFrame(function () { raf = 0; renderAll(); }); }
+  function docs(name) { var m = S.data[name] || {}; return Object.keys(m).map(function (k) { var o = Object.assign({}, m[k]); o.id = k; return o; }); }
+  function compute() {
+    if (!S.dirty && S.D) return S.D;
+    var m = S.data.market || {};
+    S.D = L.computeAll({
+      today: todayNY(), todayUK: todayUK(), nowMs: nowMs(),
+      market: { status: m.status, pipeline: m.pipeline, calendar: m.calendar },
+      prices: S.data.prices, checks: S.data.checks, trades: docs('trades'), deposits: docs('deposits'), settings: S.data.settings.main
+    });
+    S.dirty = false;
+    return S.D;
+  }
+  function allLoaded() { return COLLECTIONS.every(function (c) { return S.loaded[c] || S.subErr[c]; }); }
+
+  function renderAll() {
+    if (S.phase === 'absent') { renderAbsent(); return; }
+    if (S.phase === 'loading' || !allLoaded()) {
+      fill('todayStatus', h('p', { class: 'loading' }, 'Loading your tracker…'));
+      return;
+    }
+    var D = compute();
+    var keep = captureOpen();
+    renderGlobal(D);
+    renderToday(D);
+    renderPerformance(D);
+    renderSpinoffs(D);
+    renderRecords(D);
+    restoreOpen(keep);
+  }
+
+  /* keep <details> open across re-renders */
+  function captureOpen() { return S.openKeys; }
+  function restoreOpen() {
+    document.querySelectorAll('details[data-key]').forEach(function (d) { var k = d.getAttribute('data-key'); if (S.openKeys[k]) d.open = true; });
+  }
+  document.addEventListener('toggle', function (e) {
+    var d = e.target;
+    if (d && d.tagName === 'DETAILS' && d.hasAttribute('data-key')) S.openKeys[d.getAttribute('data-key')] = d.open;
+  }, true);
+
+  function renderAbsent() {
+    var msg = h('div', { class: 'banner banner--info' }, icon('info'), h('div', null,
+      h('p', null, h('b', null, 'Your records can’t be reached here.')),
+      h('p', null, 'Open this tracker in claude.ai to see today’s actions and log trades. The daily market data and your records live with the artifact there.')));
+    var g = $('globalNotice'); g.hidden = false; g.textContent = ''; g.appendChild(msg);
+    fill('todayStatus', null);
+    fill('todayActions', h('p', { class: 'empty' }, 'Nothing to show without your records.'));
+    fill('todaySummary', h('p', { class: 'empty' }, 'Your account value appears here once your records load.'));
+    fill('todayComing', h('p', { class: 'empty' }, 'Upcoming buy and sell dates appear here.'));
+    fill('perfHead', h('p', { class: 'empty' }, 'Your returns against the S&P 500 and Nasdaq-100 funds appear here.'));
+    fill('chart', h('p', { class: 'empty' }, 'The chart needs your records.'));
+    fill('perfStats', null); fill('perfClosed', null);
+    fill('spinPositions', h('p', { class: 'empty' }, 'Your open spin-offs appear here.'));
+    fill('spinPipeline', null);
+    fill('recTrades', h('p', { class: 'empty' }, 'Unavailable here.'));
+    fill('recDeposits', h('p', { class: 'empty' }, 'Unavailable here.'));
+    fill('recDismissed', h('p', { class: 'empty' }, 'Unavailable here.'));
+    setFormsDisabled(true);
+  }
+
+  function setFormsDisabled(dis) {
+    ['depQuick', 'depSubmit', 'recAddTrade', 'setSave', 'tradeSubmit'].forEach(function (id) { var b = $(id); if (b) b.disabled = !!dis; });
+  }
+
+  function renderGlobal(D) {
+    var g = $('globalNotice');
+    var items = [];
+    var errs = COLLECTIONS.filter(function (c) { return S.subErr[c]; });
+    if (errs.length) {
+      items.push(h('div', { class: 'banner banner--bad', role: 'alert' }, icon('alert'), h('div', null,
+        h('p', null, 'Some data couldn’t load (' + errs.join(', ') + '). Reload the page to try again.'))));
+    }
+    var seen = {};
+    D.warnings.forEach(function (w) {
+      if (seen[w.text]) return; seen[w.text] = true;
+      items.push(h('div', { class: 'banner banner--warn' }, icon('alert'), h('div', null, h('p', { text: w.text }))));
+    });
+    g.textContent = '';
+    add(g, items);
+    g.hidden = !items.length;
+    var badge = $('badgeToday');
+    badge.hidden = !D.actions.length; badge.textContent = D.actions.length ? String(D.actions.length) : '';
+    $('tab-today').setAttribute('aria-label', D.actions.length ? 'Today, ' + D.actions.length + ' to do' : 'Today');
+    var pricesTo = D.asOf || D.health.lastMarketDay;
+    $('mastMeta').textContent = pricesTo ? 'Prices to ' + L.fmtDate(pricesTo) + ' close' : 'Trading 212 Stocks & Shares ISA';
+    setFormsDisabled(!canWrite());
+    var ro = $('recReadOnly');
+    ro.textContent = '';
+    if (!canWrite()) ro.appendChild(h('div', { class: 'banner banner--info' }, icon('info'), h('div', null, h('p', null, 'You can view these records but not change them.'))));
+  }
+
+  /* ---------- TODAY ---------- */
+  function renderToday(D) {
+    $('todayDate').textContent = L.weekdayOf(todayUK()) + ' ' + L.fmtDate(todayUK(), { weekday: false });
+    renderStatus(D);
+    var acts = [];
+    if (!D.hasDeposits) {
+      acts.push(h('div', { class: 'panel nothing' },
+        h('p', { class: 'nothing__h' }, 'Start by logging your money'),
+        h('p', { class: 'fg2' }, 'Log the money already in your account as your first deposit. Then the tracker can size each buy and compare you with the index funds.'),
+        h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn btn--primary', onclick: function () { setTab('records'); setTimeout(function () { $('depAmount').focus(); }, 30); } }, 'Log my first deposit'))));
+    }
+    if (needsPlanPanel(D)) acts.push(planPanel(D));
+    D.actions.forEach(function (a) { acts.push(a.kind === 'sell' ? sellCard(a, D) : buyCard(a, D)); });
+    if (!D.actions.length && D.hasDeposits) {
+      var next = D.coming[0];
+      acts.push(h('div', { class: 'panel nothing' },
+        h('p', { class: 'nothing__h' }, 'Nothing to do today'),
+        next ? h('p', { class: 'fg2' }, 'Next: ', next.kind === 'buy' ? 'buy ' : 'sell ', tickEl(next.ticker), next.company ? ' (' + next.company + ')' : '', ' on ' + L.weekdayOf(next.date) + ' ' + L.fmtDate(next.date, { weekday: false, year: next.date.slice(0, 4) !== D.today.slice(0, 4) }) + '.',
+          next.kind === 'buy' && D.sliceAmount != null ? ' At today’s value that is about ' + money(D.sliceAmount, { dp: 0 }) + ' (1/' + D.settings.slice + ' of your account), if it passes the price and volume check.' : '')
+          : h('p', { class: 'fg2' }, D.health.hasData ? 'No buy or sell dates are coming up yet. The daily check will flag new spin-offs.' : 'Buy dates appear after the first daily check.')));
+    }
+    fill('todayActions', acts);
+    renderSummary(D);
+    renderComing(D);
+  }
+
+  function renderStatus(D) {
+    var H = D.health, out = [];
+    if (!H.hasData) {
+      out.push(h('div', { class: 'banner banner--info' }, icon('clock'), h('div', null,
+        h('p', null, h('b', null, 'The first daily check hasn’t run yet.')),
+        h('p', null, 'Spin-off signals and prices appear after it runs. Your own records already work.'))));
+    } else {
+      if (H.stale) {
+        out.push(h('div', { class: 'banner banner--warn', role: 'status' }, icon('alert'), h('div', null,
+          h('p', null, h('b', null, 'Data is from ' + L.fmtDate(H.todayNY || L.todayNY(H.generatedAt), { year: true }) + '; the daily check may have stopped.')),
+          h('p', null, 'Treat buy and sell dates with care until it runs again.'))));
+      }
+      if (!H.scanOk || H.errors.length) {
+        out.push(h('div', { class: 'banner banner--bad', role: 'alert' }, icon('alert'), h('div', null,
+          h('p', null, h('b', null, H.scanOk ? 'The last check reported problems:' : 'The last check didn’t finish. Some signals may be missing:')),
+          H.errors.length ? h('ul', null, H.errors.slice(0, 6).map(function (e) { return h('li', { text: e }); })) : null)));
+      }
+    }
+    var txt = h('div', { class: 'statusline__txt' });
+    if (H.hasData) {
+      txt.appendChild(h('span', null, h('span', { class: 'dot' + (H.stale ? ' dot--warn' : (!H.scanOk ? ' dot--bad' : '')), 'aria-hidden': 'true' }),
+        'Checked ' + (H.generatedAt ? L.fmtInstantUK(H.generatedAt) + ' UK' : 'recently')));
+      if (H.nextCheck) txt.appendChild(h('span', { class: 'muted' }, 'Next: ' + H.nextCheck));
+    }
+    var line = h('div', { class: 'statusline' }, txt, checkNow(H));
+    out.push(line);
+    fill('todayStatus', out);
+    if (H.nextCheck) $('helpSchedule').textContent = H.nextCheck.charAt(0).toLowerCase() + H.nextCheck.slice(1);
+  }
+
+  function checkNow(H) {
+    if (!S.mcp || !H.triggerId) return null;
+    var st = S.check;
+    var btn = h('button', { type: 'button', class: 'btn btn--small', id: 'checkNowBtn', disabled: st.state === 'running' || st.state === 'started', onclick: function () { runCheck(H.triggerId); } },
+      st.state === 'running' ? 'Starting…' : 'Check now');
+    return h('div', { class: 'checknow' }, btn, st.msg ? h('span', { class: 'checknow__msg', role: 'status', text: st.msg }) : null);
+  }
+  function runCheck(triggerId) {
+    if (S.check.state === 'running') return;
+    S.check = { state: 'running', msg: '' }; renderStatus(compute());
+    S.mcp.callTool('Claude Code Remote', 'fire_trigger', { trigger_id: triggerId }, { cache: false }).then(function () {
+      S.check = { state: 'started', msg: 'Started a check; results in a few minutes.' };
+      setTimeout(function () { if (S.check.state === 'started') { S.check = { state: 'idle', msg: '' }; renderStatus(compute()); } }, 5 * 60 * 1000);
+      renderStatus(compute());
+    }).catch(function (e) {
+      var c = e && e.code, m;
+      if (c === 'needs_reauth') m = 'Reconnect Claude Code Remote in claude.ai Settings → Connectors, then try again.';
+      else if (c === 'server_not_connected' || c === 'server_not_found' || c === 'selection_required') m = 'Add the Claude Code Remote connector in claude.ai Settings → Connectors to start checks from here.';
+      else if (c === 'approval_required' || c === 'consent_required') m = 'Starting a check needs your approval. Tap Check now again and choose Allow.';
+      else if (c === 'not_in_manifest' || c === 'blocked_by_policy') m = 'This page isn’t allowed to start checks. The daily check still runs on schedule.';
+      else if (c === 'tool_error') m = 'The check couldn’t start: ' + (e.message || 'the scheduler refused it') + '.';
+      else if (c === 'server_unavailable' || c === 'upstream_error' || c === 'rate_limited') m = 'No answer from the scheduler. A check may have started anyway; look again in a few minutes before retrying.';
+      else if (c === 'not_granted' || c === 'capability_disabled' || c === 'capability_removed') m = 'Checks can’t be started from this view.';
+      else m = 'Couldn’t start a check. Try again later.';
+      S.check = { state: 'idle', msg: m };
+      renderStatus(compute());
+    });
+  }
+
+  function whenText(a) {
+    var day = a.tradeDay, todayD = todayNY();
+    if (day === todayD) return 'today, US market opens ' + a.openUK + ' UK time';
+    return L.weekdayOf(day) + ' ' + L.fmtDate(day, { weekday: false }) + ', market opens ' + a.openUK + ' UK time';
+  }
+
+  function sellCard(a, D) {
+    var p = a.position, fund = D.fundCode;
+    var chip = a.overdue ? h('span', { class: 'chip chip--late' }, icon('alert'), 'Sell · overdue') : h('span', { class: 'chip chip--sell' }, icon('down'), 'Sell');
+    var due = a.overdue ? 'Overdue since ' + L.fmtDate(a.sellDate) + '. Sell ' + whenText(a) : 'Sell ' + whenText(a);
+    var alsoBuying = D.actions.some(function (x) { return x.kind === 'buy'; });
+    var steps = [
+      'Open Trading 212 and switch to your Stocks & Shares ISA.',
+      h('span', null, 'Search ', tickEl(a.ticker), ', open your holding and tap Sell.'),
+      'Choose Quantity and enter all ' + L.fmtShares(a.shares) + ' shares. Review and confirm. Before the US market opens, the order waits and fills at the open.',
+      alsoBuying ? 'Keep the cash for today’s buys (see today’s plan).' : h('span', null, 'Once it has filled, search ', tickEl(fund), ', tap Buy, choose Value and enter the pounds you received.'),
+      'Come back here and tap I sold it. Enter the pounds Trading 212 paid you.'
+    ];
+    return h('article', { class: 'panel action', 'aria-label': 'Sell ' + a.ticker },
+      h('div', { class: 'action__head' }, chip, h('span', { class: 'action__when', text: due })),
+      h('h3', { class: 'action__title' }, tickEl(a.ticker), a.company ? h('span', { class: 'co', text: a.company }) : null),
+      h('p', { class: 'action__lead' }, alsoBuying ? 'Sell all ' + L.fmtShares(a.shares) + ' shares. The money goes toward today’s buys.' : 'Sell all ' + L.fmtShares(a.shares) + ' shares, then put the money into ' + fund + '.'),
+      h('dl', { class: 'facts' },
+        fact('Bought', L.fmtDate(p.openDate, { year: true })),
+        fact('Worth now', money(p.value, { dp: 0 }) + (p.estimated ? ' (est.)' : '')),
+        fact('Return', h('span', { class: cls(p.ret) }, L.fmtPct(p.ret))),
+        fact('S&P fund, same dates', L.fmtPct(p.spRet))),
+      stepsBlock('sell-' + a.ticker, steps),
+      h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn btn--primary', disabled: !canWrite(), onclick: function (e) {
+        openTrade({ type: 'sell', ticker: a.ticker, shares: L.fmtShares(a.shares).replace(/,/g, ''), hint: 'Selling all ' + L.fmtShares(a.shares) + ' shares of ' + a.ticker + '. Enter the pounds you received after the FX fee.' }, e.currentTarget);
+      } }, 'I sold it')));
+  }
+
+  function fact(k, v) { return h('div', null, h('dt', { text: k }), h('dd', { class: 'num' }, v)); }
+  function stepsBlock(key, steps) {
+    return h('details', { class: 'steps', 'data-key': key },
+      h('summary', null, 'Step by step in Trading 212'),
+      h('ol', null, steps.map(function (s) { return h('li', null, s); })));
+  }
+
+  function needsPlanPanel(D) {
+    var buys = D.actions.filter(function (x) { return x.kind === 'buy'; }).length;
+    return buys > 0 && D.actions.length > 1;
+  }
+  function listTickers(arr) {
+    var out = [];
+    arr.forEach(function (t, i) { if (i) out.push(i === arr.length - 1 ? ' and ' : ', '); out.push(tickEl(t)); });
+    return out;
+  }
+  function trimLine(plan) {
+    return h('span', null, 'Trim your other spin-offs in proportion to their value: ',
+      plan.trims.map(function (t, i) { return [i ? ', ' : '', 'sell ' + money(t.amount) + ' of ', tickEl(t.ticker)]; }), '.');
+  }
+  function planPanel(D) {
+    var plan = D.plan, fund = D.fundCode;
+    var sells = D.actions.filter(function (x) { return x.kind === 'sell'; });
+    var buys = D.actions.filter(function (x) { return x.kind === 'buy'; });
+    var steps = [];
+    sells.forEach(function (a) { steps.push(h('span', null, 'Sell all ' + L.fmtShares(a.shares) + ' ', tickEl(a.ticker), ' shares (about ' + money(a.position.value, { dp: 0 }) + ').')); });
+    var saleNames = sells.map(function (a) { return a.ticker; });
+    if (plan && plan.mode === 'fund') {
+      if (plan.fundSell > 0.005) steps.push(h('span', null, 'Sell ' + money(plan.fundSell) + ' of ', tickEl(fund), '.' + (plan.fromSales > 0 ? ' With the money from ' + saleNames.join(' and ') + ' that makes ' + money(plan.need) + '.' : '')));
+      else if (plan.fromSales > 0) steps.push('Keep the money from ' + saleNames.join(' and ') + ' for the buys. No need to sell ' + fund + '.');
+    } else if (plan) {
+      steps.push(h('span', null, 'Sell all your ', tickEl(fund), ' (about ' + money(plan.fundSell, { dp: 0 }) + ').'));
+      if (plan.trims.length) steps.push(trimLine(plan));
+    }
+    if (buys.length) {
+      var amt = buys[0].amount != null ? money(buys[0].amount) : '–';
+      steps.push(h('span', null, 'Buy ', listTickers(buys.map(function (b) { return b.ticker; })), (buys.length > 1 ? ' for ' + amt + ' each.' : ' for ' + amt + '.') + ' Each is 1/' + D.settings.slice + ' of your account.'));
+    }
+    if (plan && plan.fundBuy > 0.5) steps.push(h('span', null, 'Put the ' + money(plan.fundBuy) + ' left over into ', tickEl(fund), '.'));
+    else if (!buys.length && sells.length) steps.push(h('span', null, 'Put the money into ', tickEl(fund), '.'));
+    steps.push('Log each trade here as you go, using the buttons below.');
+    var shortfall = plan && plan.shortfall > 0.5 ? h('p', { class: 'neg', style: 'margin:0' }, 'Your account can’t cover every buy in full: ' + money(plan.shortfall) + ' short. Buy what the cash covers.') : null;
+    return h('section', { class: 'panel todayplan', 'aria-labelledby': 'planH' },
+      h('h3', { id: 'planH' }, 'Today’s plan'),
+      h('ol', null, steps.map(function (x) { return h('li', null, x); })), shortfall);
+  }
+  function planBlock(plan, a, D) {
+    if (!plan) return h('div', { class: 'plan' }, h('p', { class: 'fg2', style: 'margin:0' }, 'The amount appears once your account can be valued.'));
+    if (needsPlanPanel(D)) return h('div', { class: 'plan' }, h('p', { style: 'margin:0' }, h('b', null, 'Pay for it: '), 'follow today’s plan above. Sell first, then buy.'));
+    var fund = plan.fund, lines = [];
+    if (plan.mode === 'fund') {
+      lines.push(h('p', { style: 'margin:0' }, h('b', null, 'Pay for it: '), 'sell ' + money(plan.fundSell) + ' of ', tickEl(fund), ' first.'));
+    } else {
+      lines.push(h('p', { style: 'margin:0' }, h('b', null, 'Pay for it: '), 'sell all your ', tickEl(fund), ' (about ' + money(plan.fundSell) + '), then trim ' + money(plan.trim) + ' from your other spin-offs:'));
+      if (plan.trims.length) lines.push(h('ul', null, plan.trims.map(function (t) { return h('li', null, 'Sell ', h('span', { class: 'num' }, money(t.amount)), ' of ', tickEl(t.ticker)); })));
+      if (plan.shortfall > 0.5) lines.push(h('p', { class: 'neg', style: 'margin:0' }, 'That still leaves ' + money(plan.shortfall) + ' short. Buy what the cash covers.'));
+    }
+    return h('div', { class: 'plan' }, lines);
+  }
+
+  function checkSentence(chk) {
+    var bits = [];
+    if (chk.parent) bits.push('Spun off from ' + String(chk.parent).trim().replace(/\.$/, '') + '.');
+    if (chk.business) bits.push(String(chk.business).trim().replace(/\.$/, '') + '.');
+    return bits.join(' ');
+  }
+  function checkRow(chk) {
+    if (chk && chk.genuine === true) {
+      return h('div', { class: 'checkrow checkrow--ok' }, icon('check'), h('div', null, h('b', null, 'Checked: '), checkSentence(chk) || 'a genuine spin-off.'));
+    }
+    if (chk && chk.genuine == null) {
+      return h('div', { class: 'checkrow checkrow--unk' }, icon('q'), h('div', null, h('b', null, 'Unclear: '), chk.note ? String(chk.note) : 'the Form 10 didn’t settle whether this is a true spin-off.'));
+    }
+    return h('div', { class: 'checkrow checkrow--unk' }, icon('q'), h('div', null, h('b', null, 'Not yet checked. '), 'The daily check reads the Form 10 to confirm it’s a real spin-off.'));
+  }
+
+  function buyCard(a, D) {
+    var r = a.item.raw, fund = D.fundCode;
+    var chip = h('span', { class: 'chip chip--buy' }, icon('up'), 'Buy');
+    var when = a.windowEnd ? (a.lastDay ? 'Last day to buy. ' : 'Window open until ' + L.fmtDate(a.windowEnd) + '. ') + 'Buy ' + whenText(a) : 'Buy ' + whenText(a);
+    var amt = a.amount != null ? money(a.amount) : '–';
+    var plan = a.plan;
+    var steps = ['Open Trading 212 and switch to your Stocks & Shares ISA.'];
+    if (needsPlanPanel(D)) steps.push('Do the selling steps in today’s plan first.');
+    else if (plan && plan.mode === 'fund') steps.push(h('span', null, 'Search ', tickEl(fund), ', tap Sell, choose Value and enter ' + money(plan.fundSell) + '. Confirm.'));
+    else if (plan) {
+      steps.push(h('span', null, 'Search ', tickEl(fund), ', tap Sell and sell all of it.'));
+      if (plan.trims.length) steps.push(h('span', null, 'For each spin-off, tap Sell, choose Value and enter: ', plan.trims.map(function (t, i) { return [i ? ', ' : '', tickEl(t.ticker), ' ' + money(t.amount)]; }), '.'));
+    }
+    steps.push(h('span', null, 'Search ', tickEl(a.ticker), ' and check the name matches ' + a.company + '.'));
+    steps.push('Tap Buy, choose Value in GBP, and enter ' + amt + '. Trading 212 converts it to dollars and charges a 0.15% FX fee.');
+    steps.push('Review and confirm. Before ' + a.openUK + ' UK time the order waits and fills when the US market opens.');
+    steps.push('Come back here and tap I bought it. Enter the shares and the total from the order confirmation.');
+    return h('article', { class: 'panel action', 'aria-label': 'Buy ' + a.ticker },
+      h('div', { class: 'action__head' }, chip,
+        a.pending ? h('span', { class: 'chip chip--info', title: 'The $1 / $100K check runs with the next price update' }, icon('clock'), 'Price check pending') : null,
+        h('span', { class: 'action__when', text: when })),
+      h('h3', { class: 'action__title' }, tickEl(a.ticker), h('span', { class: 'co', text: a.company }), r.exchange ? h('span', { class: 'tag', text: r.exchange }) : null),
+      h('div', { class: 'amount' }, h('span', { class: 'amount__v', text: amt }),
+        h('span', { class: 'amount__n', text: D.account.value != null ? '1/' + D.settings.slice + ' of your ' + money(D.account.value, { dp: 0 }) + ' account' : '' })),
+      checkRow(a.check),
+      h('dl', { class: 'facts' },
+        fact('First traded', r.first_trade ? L.fmtDate(r.first_trade, { year: true }) : '–'),
+        fact('Last close', r.last_close != null ? L.fmtMoney(+r.last_close, { sym: '$' }) : '–'),
+        fact('Avg daily trading', r.avg_dollar_volume != null ? '$' + L.fmtCompact(+r.avg_dollar_volume).replace('£', '') : '–'),
+        secLink(r.form10_url, r.id) ? h('div', null, h('dt', { text: 'SEC filing' }), h('dd', null, secLink(r.form10_url, r.id))) : null),
+      planBlock(plan, a, D),
+      stepsBlock('buy-' + a.ticker, steps),
+      h('div', { class: 'btns' },
+        h('button', { type: 'button', class: 'btn btn--primary', disabled: !canWrite(), onclick: function (e) {
+          openTrade({ type: 'buy', ticker: a.ticker, amount: a.amount != null ? a.amount.toFixed(2) : '', hint: 'Planned amount ' + amt + '. Enter what Trading 212 actually took, including the FX fee, and the shares you got.' }, e.currentTarget);
+        } }, 'I bought it'),
+        h('button', { type: 'button', class: 'btn', disabled: !canWrite(), onclick: function () { dismiss(a.ticker, 'Not available on Trading 212'); } }, 'Not on Trading 212'),
+        h('button', { type: 'button', class: 'btn btn--quiet', disabled: !canWrite(), onclick: function () { dismiss(a.ticker, 'Skipped'); } }, 'Skip this one')));
+  }
+
+  function dismiss(ticker, reason) {
+    saveSettings(function (s) { s.dismissed[ticker] = reason; }, 'that choice').then(function () {
+      toast(ticker + ' hidden (' + reason.toLowerCase() + ').', { undo: function () { saveSettings(function (s) { delete s.dismissed[ticker]; }, 'that choice').catch(function () {}); } });
+    }).catch(function () {});
+  }
+
+  function renderSummary(D) {
+    var hd = D.head;
+    if (!hd || !hd.you) {
+      fill('todaySummary', h('p', { class: 'empty' }, D.hasRecords ? 'Your account value appears after the next daily check brings in prices.' : 'Your account value appears once you log a deposit.'));
+      return;
+    }
+    var y = hd.you;
+    var nodes = [
+      h('div', null, h('p', { class: 'hero', text: money(y.value, { dp: 0 }) }),
+        h('p', { class: 'hero-sub' }, h('span', { class: cls(y.gain) }, signed(y.gain) + ' (' + L.fmtPct(y.gainPct) + ')'), ' on ' + money(y.moneyIn, { dp: 0 }) + ' paid in')),
+      h('div', { class: 'vsrow' },
+        h('div', null, h('div', { class: 'k' }, h('span', { class: 'keyline k-sp' }), 'vs S&P 500 fund'), h('div', { class: 'v ' + cls(hd.vsSP), text: hd.vsSP == null ? '–' : signed(hd.vsSP) })),
+        h('div', null, h('div', { class: 'k' }, h('span', { class: 'keyline k-nq' }), 'vs Nasdaq-100 fund'), h('div', { class: 'v ' + cls(hd.vsNQ), text: hd.vsNQ == null ? '–' : signed(hd.vsNQ) })))
+    ];
+    var share = D.account.spinShare, risk = D.risk;
+    var parts = [];
+    parts.push(D.open.length + ' spin-off' + (D.open.length === 1 ? '' : 's') + ' held (' + money(D.account.spinValue || 0, { dp: 0 }) + ')');
+    if (D.account.pot != null) parts.push(money(D.account.pot, { dp: 0 }) + ' in ' + D.fundCode);
+    var pct = share == null ? '–' : Math.round(share * 100) + '%';
+    nodes.push(h('div', { class: 'expo' },
+      h('div', { class: 'expo__top' }, h('span', null, 'Spin-offs: ', h('b', { class: 'num', text: pct }), ' of your account'),
+        h('button', { type: 'button', class: 'linkbtn small', onclick: function () { setTab('records'); setTimeout(function () { var el = $('settingsPanel'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }); }, 30); } }, 'Risk level: ' + risk.name + ' (1/' + risk.slice + ' each)')),
+      h('div', { class: 'meter', role: 'img', 'aria-label': 'Spin-offs ' + pct + ' of the account' }, h('span', { style: 'width:' + ((share || 0) * 100).toFixed(1) + '%' })),
+      h('p', { class: 'small fg2', style: 'margin:0' }, parts.join(' · '))));
+    if (D.hasDeposits && !D.depositThisMonth) {
+      var mAmt = D.settings.monthly_deposit;
+      nodes.push(h('div', { class: 'remind' }, h('span', null, 'No deposit logged for ' + L.monthName(todayUK(), true) + ' yet.'),
+        h('button', { type: 'button', class: 'btn btn--small', disabled: !canWrite(), onclick: quickDeposit }, 'Log ' + money(mAmt))));
+    }
+    fill('todaySummary', h('div', { class: 'summary' }, nodes));
+  }
+
+  function renderComing(D) {
+    if (!D.coming.length) { fill('todayComing', h('p', { class: 'empty' }, D.health.hasData ? 'No dated buys or sells ahead yet.' : 'Upcoming buy and sell dates appear here.')); return; }
+    var list = D.coming.slice(0, S.showAll.coming ? 50 : 6);
+    var ul = h('ul', { class: 'rows' }, list.map(function (c) {
+      return h('li', { class: 'cal' },
+        h('div', { class: 'cal__d' }, h('b', { text: L.weekdayOf(c.date).slice(0, 3) }), L.fmtDate(c.date, { weekday: false }) + (c.date.slice(0, 4) !== D.today.slice(0, 4) ? ' ’' + c.date.slice(2, 4) : '')),
+        h('div', { class: 'cal__t' },
+          h('div', null, h('span', { class: 'chip ' + (c.kind === 'buy' ? 'chip--buy' : 'chip--sell') }, c.kind === 'buy' ? 'Buy' : 'Sell'), ' ', tickEl(c.ticker), c.company ? ' ' + c.company : ''),
+          h('div', { class: 'cal__s', text: (c.tradingDays === 1 ? 'Next trading day' : 'In ' + c.tradingDays + ' trading days') + (c.kind === 'sell' ? ' · 12 months since you bought' : (c.windowEnd ? ' · window to ' + L.fmtDate(c.windowEnd) : '')) })));
+    }));
+    var nodes = [ul];
+    if (D.coming.length > 6) nodes.push(h('button', { type: 'button', class: 'linkbtn more-btn', onclick: function () { S.showAll.coming = !S.showAll.coming; renderComing(D); } }, S.showAll.coming ? 'Show fewer' : 'Show all ' + D.coming.length));
+    fill('todayComing', nodes);
+  }
+
+  /* ---------- PERFORMANCE ---------- */
+  function renderPerformance(D) {
+    var hd = D.head;
+    $('chartAsOf').textContent = D.asOf ? 'to ' + L.fmtDate(D.asOf, { year: true }) : '';
+    if (!hd || !hd.you) {
+      fill('perfHead', h('p', { class: 'empty' }, D.hasRecords ? 'Returns appear after the next daily check brings in prices.' : 'Log your deposits to compare your account with the index funds.'));
+    } else {
+      var cols = [['you', 'Your account', 'k-you'], ['sp', 'S&P 500 fund only', 'k-sp'], ['nq', 'Nasdaq-100 fund only', 'k-nq']];
+      var row = function (label, f) {
+        return h('tr', null, h('th', { scope: 'row', text: label }), cols.map(function (c) { var o = hd[c[0]]; return h('td', { class: c[0] === 'you' ? 'you' : '' }, o ? f(o) : '–'); }));
+      };
+      var retLabel = hd.annualised ? 'Per year' : 'Since you started';
+      var tbl = h('table', { class: 'cmp' },
+        h('thead', null, h('tr', null, h('th', { scope: 'col' }, h('span', { class: 'vh' }, 'Measure')), cols.map(function (c) { return h('th', { scope: 'col' }, h('span', { class: 'keyline ' + c[2] }), c[1]); }))),
+        h('tbody', null,
+          row('Value', function (o) { return money(o.value, { dp: 0 }); }),
+          row('Gain', function (o) { return h('span', { class: cls(o.gain) }, signed(o.gain)); }),
+          row(retLabel, function (o) { var v = hd.annualised ? o.xirr : o.gainPct; return h('span', { class: cls(v) }, L.fmtPct(v)); })));
+      var note = hd.annualised ? 'Per year is the money-weighted yearly rate (XIRR), which allows for when each deposit went in.' :
+        'Since you started is the gain on money paid in, not a yearly rate. A yearly rate appears once your first deposit is a year old (' + L.fmtDate(L.addDays(hd.firstDeposit, 365), { year: true }) + ').';
+      fill('perfHead', [h('div', { class: 'tablewrap' }, tbl), h('p', { class: 'small muted', style: 'margin:0', text: 'Money paid in: ' + money(hd.you.moneyIn) + '. ' + note })]);
+    }
+    if (S.tab === 'performance') drawChartSoon();
+    renderChartTable(D);
+    renderClosed(D);
+  }
+
+  function renderClosed(D) {
+    var st = D.stats;
+    if (!st) {
+      fill('perfStats', h('p', { class: 'empty' }, D.open.length ? 'No spin-off has been sold yet. Results appear here after the first one completes its 12 months.' : 'Results appear here after your first spin-off completes its 12 months.'));
+      fill('perfClosed', null);
+      return;
+    }
+    fill('perfStats', h('div', { class: 'stats' },
+      stat('Sold', String(st.n)),
+      stat('Made money', Math.round(st.winRate * 100) + '%', st.wins + ' of ' + st.n),
+      stat('Average return', h('span', { class: cls(st.avgRet) }, L.fmtPct(st.avgRet))),
+      stat('Average vs S&P fund', h('span', { class: cls(st.avgExcess) }, L.fmtPts(st.avgExcess)), 'beat it ' + st.beat + ' of ' + st.n)));
+    var t = h('table', { class: 'dtable' },
+      h('thead', null, h('tr', null, ['Spin-off', 'Bought', 'Sold', 'Days', 'Paid', 'Got back', 'Return', 'S&P fund', 'Difference'].map(function (x) { return h('th', { scope: 'col', text: x }); }))),
+      h('tbody', null, D.closed.map(function (c) {
+        return h('tr', null,
+          h('td', { class: 'txt' }, tickEl(c.ticker), c.company ? h('span', { class: 'muted', text: ' ' + c.company }) : null),
+          h('td', { text: L.fmtDate(c.openDate, { weekday: false, year: true }) }), h('td', { text: L.fmtDate(c.closeDate, { weekday: false, year: true }) }),
+          h('td', { text: String(c.daysHeld) }), h('td', { text: money(c.cost) }), h('td', { text: money(c.proceeds) }),
+          h('td', null, h('span', { class: cls(c.ret) }, L.fmtPct(c.ret))), h('td', { text: L.fmtPct(c.spRet) }),
+          h('td', null, h('span', { class: cls(c.excess) }, L.fmtPts(c.excess))));
+      })));
+    var list = h('ul', { class: 'rows only-narrow' }, D.closed.map(function (c) {
+      return h('li', { class: 'closed' },
+        h('div', { class: 'closed__top' }, h('span', null, tickEl(c.ticker), c.company ? h('span', { class: 'fg2', text: ' ' + c.company }) : null), h('span', { class: 'closed__ret num ' + cls(c.ret), text: L.fmtPct(c.ret) })),
+        h('div', { class: 'closed__sub', text: L.fmtDate(c.openDate, { weekday: false, year: true }) + ' to ' + L.fmtDate(c.closeDate, { weekday: false, year: true }) + ' · ' + c.daysHeld + ' days' }),
+        h('div', { class: 'closed__sub' }, 'Paid ' + money(c.cost) + ', got back ' + money(c.proceeds) + ' · S&P fund ' + L.fmtPct(c.spRet) + ' · ', h('span', { class: cls(c.excess), text: L.fmtPts(c.excess) })));
+    }));
+    fill('perfClosed', [list, h('div', { class: 'tablewrap only-wide' }, t)]);
+  }
+  function stat(k, v, sub) { return h('div', null, h('div', { class: 'k', text: k }), h('div', { class: 'v' }, v), sub ? h('div', { class: 'k', text: sub }) : null); }
+
+  function renderChartTable(D) {
+    var s = D.series;
+    if (!s) { fill('chartTable', h('p', { class: 'empty' }, 'No data yet.')); return; }
+    var idx = [];
+    for (var i = 0; i < s.dates.length; i++) { if (i === s.dates.length - 1 || L.monthKey(s.dates[i + 1]) !== L.monthKey(s.dates[i])) idx.push(i); }
+    idx.reverse();
+    var t = h('table', { class: 'dtable' },
+      h('thead', null, h('tr', null, ['Month end', 'Your account', 'S&P 500 fund only', 'Nasdaq-100 fund only', 'Money in'].map(function (x) { return h('th', { scope: 'col', text: x }); }))),
+      h('tbody', null, idx.map(function (i) {
+        return h('tr', null, h('td', { text: L.fmtDate(s.dates[i], { weekday: false, year: true }) }),
+          h('td', { text: money(s.account[i], { dp: 0 }) }), h('td', { text: money(s.sp[i], { dp: 0 }) }), h('td', { text: money(s.nq[i], { dp: 0 }) }), h('td', { text: money(s.moneyIn[i], { dp: 0 }) }));
+      })));
+    fill('chartTable', t);
+  }
+
+  /* ---------- chart: hand-drawn SVG line chart with crosshair ---------- */
+  var chartRaf = 0, chartState = null;
+  function drawChartSoon() { if (!chartRaf) chartRaf = requestAnimationFrame(function () { chartRaf = 0; if (S.D) drawChart(S.D); }); }
+  /* smallest clean step (1, 2, 2.5, 5 x 10^k) that covers span in at most n + 1 intervals */
+  function niceStep(span, n) {
+    var p = Math.pow(10, Math.floor(Math.log10(span / Math.max(1, n))) - 1);
+    for (var k = 0; k < 4; k++, p *= 10) {
+      var c = [1, 2, 2.5, 5];
+      for (var i = 0; i < c.length; i++) if (Math.ceil(span / (c[i] * p) - 1e-9) <= n + 1) return c[i] * p;
+    }
+    return p;
+  }
+  function drawChart(D) {
+    var host = $('chart');
+    if (!host || host.offsetParent === null) return;
+    var s = D.series;
+    host.textContent = '';
+    if (!s || s.dates.length < 2 || s.account.every(function (v) { return v == null; })) {
+      host.appendChild(h('p', { class: 'empty' }, D.hasRecords ? 'The chart appears once there are at least two days of prices.' : 'The chart appears once you log a deposit.'));
+      return;
+    }
+    var W = Math.max(280, Math.floor(host.clientWidth || 600));
+    var narrow = W < 560;
+    var H = narrow ? 250 : 320;
+    var M = { t: 12, r: narrow ? 98 : 132, b: 26, l: 46 };
+    var pw = W - M.l - M.r, ph = H - M.t - M.b;
+    var T = s.dates.map(function (d) { return +L.parseYMD(d); });
+    var t0 = T[0], t1 = T[T.length - 1];
+    var lines = [
+      { key: 'you', name: 'Your account', tip: 'You', short: 'You', vals: s.account },
+      { key: 'sp', name: 'S&P 500 fund only', tip: 'S&P 500 fund', short: 'S&P', vals: s.sp },
+      { key: 'nq', name: 'Nasdaq-100 fund only', tip: 'Nasdaq-100', short: 'Nasdaq', vals: s.nq },
+      { key: 'in', name: 'Money in', tip: 'Money in', short: 'Paid in', vals: s.moneyIn, step: true }
+    ].filter(function (l) { return l.vals.some(function (v) { return v != null; }); });
+    var max = 0;
+    lines.forEach(function (l) { l.vals.forEach(function (v) { if (v != null && v > max) max = v; }); });
+    var step = niceStep(max || 1, narrow ? 4 : 5);
+    var ymax = Math.ceil(max / step) * step || step;
+    if (ymax - max < step * 0.03) ymax += step;
+    var x = function (t) { return M.l + (t1 === t0 ? 0 : (t - t0) / (t1 - t0) * pw); };
+    var y = function (v) { return M.t + ph - v / ymax * ph; };
+    var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, role: 'img', 'aria-label': 'Line chart of your account value against the two index funds and money paid in' });
+    /* grid + y ticks */
+    for (var v = 0; v <= ymax + 1e-6; v += step) {
+      var yy = Math.round(y(v)) + 0.5;
+      svg.appendChild(sv('line', { class: v === 0 ? 'axis' : 'gridline', x1: M.l, x2: M.l + pw, y1: yy, y2: yy }));
+      svg.appendChild(sv('text', { class: 'tl', x: M.l - 6, y: yy + 3.5, 'text-anchor': 'end' }, L.fmtCompact(v)));
+    }
+    /* x ticks: month starts */
+    var months = [];
+    var d = s.dates[0].slice(0, 7) + '-01';
+    while (d <= s.dates[s.dates.length - 1]) { if (d >= s.dates[0]) months.push(d); var mm = +d.slice(5, 7); d = (mm === 12 ? (+d.slice(0, 4) + 1) + '-01' : d.slice(0, 4) + '-' + (mm < 9 ? '0' : '') + (mm + 1)) + '-01'; }
+    var every = Math.max(1, Math.ceil(months.length / (narrow ? 4 : 8)));
+    months.forEach(function (m, i) {
+      if (i % every) return;
+      var xx = Math.round(x(+L.parseYMD(m))) + 0.5;
+      svg.appendChild(sv('line', { class: 'axis', x1: xx, x2: xx, y1: M.t + ph, y2: M.t + ph + 4 }));
+      var lab = L.monthName(m) + (m.slice(5, 7) === '01' || i === 0 ? ' ’' + m.slice(2, 4) : '');
+      svg.appendChild(sv('text', { class: 'tl', x: xx, y: H - 8, 'text-anchor': 'middle' }, lab));
+    });
+    /* area wash under your account */
+    var you = lines.filter(function (l) { return l.key === 'you'; })[0];
+    if (you) {
+      var pts = [];
+      you.vals.forEach(function (v, i) { if (v != null) pts.push(x(T[i]).toFixed(1) + ' ' + y(Math.max(0, v)).toFixed(1)); });
+      if (pts.length > 1) {
+        var base = y(0).toFixed(1);
+        svg.appendChild(sv('path', { class: 'area-you', d: 'M' + pts[0].split(' ')[0] + ' ' + base + 'L' + pts.join('L') + 'L' + pts[pts.length - 1].split(' ')[0] + ' ' + base + 'Z' }));
+      }
+    }
+    /* lines: money in first (behind), then funds, then you on top */
+    var order = ['in', 'nq', 'sp', 'you'];
+    order.forEach(function (k) {
+      var l = lines.filter(function (q) { return q.key === k; })[0];
+      if (!l) return;
+      var dd = '', pen = false;
+      l.vals.forEach(function (v, i) {
+        if (v == null) { pen = false; return; }
+        var px = x(T[i]).toFixed(1), py = y(v).toFixed(1);
+        if (!pen) { dd += 'M' + px + ' ' + py; pen = true; }
+        else if (l.step) dd += 'H' + px + 'V' + py;
+        else dd += 'L' + px + ' ' + py;
+      });
+      svg.appendChild(sv('path', { class: 'ln ln-' + k, d: dd }));
+    });
+    /* end markers + direct labels with leader lines when they collide */
+    var n = T.length - 1, ex = x(T[n]);
+    var labs = lines.map(function (l) { var v = l.vals[n]; return v == null ? null : { l: l, v: v, y0: y(v), y: y(v) }; }).filter(Boolean);
+    labs.sort(function (a, b) { return a.y0 - b.y0; });
+    var gap = 14;
+    for (var i = 1; i < labs.length; i++) if (labs[i].y - labs[i - 1].y < gap) labs[i].y = labs[i - 1].y + gap;
+    var over = labs.length ? labs[labs.length - 1].y - (M.t + ph) : 0;
+    if (over > 0) { labs.forEach(function (q) { q.y -= over; }); for (var j = labs.length - 2; j >= 0; j--) if (labs[j + 1].y - labs[j].y < gap) labs[j].y = labs[j + 1].y - gap; }
+    labs.forEach(function (q) {
+      var lx = ex + 12;
+      if (Math.abs(q.y - q.y0) > 2) svg.appendChild(sv('line', { class: 'leader', x1: ex + 5, y1: q.y0, x2: lx - 3, y2: q.y }));
+      svg.appendChild(sv('circle', { class: 'end-' + q.l.key + ' ring', cx: ex, cy: q.y0, r: q.l.key === 'in' ? 3 : 4 }));
+      svg.appendChild(sv('text', { class: 'elab', x: lx, y: q.y + 3.5 }, sv('tspan', null, q.l.short + ' '), sv('tspan', { class: 'ev' }, L.fmtCompact(q.v))));
+    });
+    /* hover layer */
+    var xh = sv('line', { class: 'xh', x1: 0, x2: 0, y1: M.t, y2: M.t + ph, visibility: 'hidden' });
+    svg.appendChild(xh);
+    var dots = lines.map(function (l) { var c = sv('circle', { class: 'end-' + l.key + ' ring', r: 4, visibility: 'hidden' }); svg.appendChild(c); return c; });
+    var hit = sv('rect', { class: 'hit', x: M.l, y: M.t, width: pw, height: ph });
+    svg.appendChild(hit);
+    host.appendChild(svg);
+    var tip = h('div', { class: 'tip', hidden: true });
+    host.appendChild(tip);
+    chartState = { idx: null };
+    function show(i) {
+      i = Math.max(0, Math.min(n, i));
+      chartState.idx = i;
+      var px = x(T[i]);
+      xh.setAttribute('x1', px); xh.setAttribute('x2', px); xh.setAttribute('visibility', 'visible');
+      lines.forEach(function (l, k) { var v = l.vals[i]; if (v == null) { dots[k].setAttribute('visibility', 'hidden'); return; } dots[k].setAttribute('cx', px); dots[k].setAttribute('cy', y(v)); dots[k].setAttribute('visibility', 'visible'); });
+      tip.textContent = '';
+      tip.appendChild(h('div', { class: 'tip__d', text: L.fmtDate(s.dates[i], { year: true }) }));
+      lines.forEach(function (l) {
+        tip.appendChild(h('div', { class: 'tip__r' }, h('span', { class: 'keyline k-' + l.key }), h('span', { class: 'n', text: narrow ? l.tip : l.name }), h('span', { class: 'v', text: money(l.vals[i], { dp: 0 }) })));
+      });
+      tip.hidden = false;
+      var scale = host.clientWidth / W;
+      var tw = tip.offsetWidth, left = px * scale + 12;
+      if (left + tw > host.clientWidth) left = px * scale - tw - 12;
+      if (left < 0) left = 0;
+      tip.style.transform = 'translate(' + Math.round(left) + 'px,' + Math.round(M.t * scale) + 'px)';
+    }
+    function hide() { xh.setAttribute('visibility', 'hidden'); dots.forEach(function (c) { c.setAttribute('visibility', 'hidden'); }); tip.hidden = true; chartState.idx = null; }
+    function idxAt(clientX) {
+      var r = svg.getBoundingClientRect();
+      var px = (clientX - r.left) * (W / r.width);
+      var t = t0 + (px - M.l) / pw * (t1 - t0);
+      var lo = 0, hi = n;
+      while (lo < hi) { var mid = (lo + hi) >> 1; if (T[mid] < t) lo = mid + 1; else hi = mid; }
+      if (lo > 0 && Math.abs(T[lo - 1] - t) < Math.abs(T[lo] - t)) lo--;
+      return lo;
+    }
+    hit.addEventListener('pointermove', function (e) { show(idxAt(e.clientX)); });
+    hit.addEventListener('pointerdown', function (e) { show(idxAt(e.clientX)); });
+    hit.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') hide(); });
+    host.onkeydown = function (e) {
+      var i = chartState.idx == null ? n : chartState.idx;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); show(i - 1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); show(i + 1); }
+      else if (e.key === 'Home') { e.preventDefault(); show(0); }
+      else if (e.key === 'End') { e.preventDefault(); show(n); }
+      else if (e.key === 'Escape') hide();
+    };
+    host.onfocus = function () { if (host.matches(':focus-visible')) show(n); };
+    host.onblur = hide;
+  }
+
+  /* ---------- SPIN-OFFS ---------- */
+  function renderSpinoffs(D) {
+    if (!D.open.length) fill('spinPositions', h('p', { class: 'empty' }, 'You don’t hold any spin-offs right now. When you log a buy it appears here with its sell date.'));
+    else fill('spinPositions', h('div', { class: 'poslist' }, D.open.map(posCard)));
+    var g = D.groups, out = [];
+    if (!D.health.hasData) out.push(h('p', { class: 'empty' }, 'The pipeline fills in after the first daily check.'));
+    else {
+      out.push(group('Buy window open', g.open, 'open', 'Nothing in its buy window today.'));
+      out.push(group('Coming up', g.coming, 'coming', 'No buy dates scheduled yet.'));
+      out.push(group('Registered, not trading yet', g.waiting, 'waiting', 'None waiting.'));
+      out.push(group('Recently missed or skipped', g.missed, 'missed', 'Nothing missed.'));
+    }
+    fill('spinPipeline', out);
+  }
+  function posCard(p) {
+    var due = p.due;
+    var left = due ? (p.overdue ? 'Overdue since ' + L.fmtDate(p.sellDate) : 'Sell today') : p.daysLeft + ' trading day' + (p.daysLeft === 1 ? '' : 's') + ' left';
+    return h('article', { class: 'panel pos-card' },
+      h('div', { class: 'pos-card__h' },
+        h('h3', { class: 'pos-card__t' }, tickEl(p.ticker), p.company ? h('span', { class: 'co', text: p.company }) : null),
+        h('div', null, h('div', { class: 'pos-card__ret ' + cls(p.ret), text: L.fmtPct(p.ret) }), h('div', { class: 'small muted', style: 'text-align:right', text: 'S&P fund ' + L.fmtPct(p.spRet) }))),
+      h('dl', { class: 'facts' },
+        fact('Worth now', money(p.value) + (p.estimated ? ' (est.)' : '')),
+        fact('Paid', money(p.cost)),
+        fact('Shares', L.fmtShares(p.shares)),
+        p.proceeds > 0 ? fact('Trimmed for', money(p.proceeds)) : fact('Bought', L.fmtDate(p.openDate, { year: true }))),
+      h('div', null,
+        h('div', { class: 'meter' + (p.daysLeft <= 5 ? ' meter--due' : ''), role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '252', 'aria-valuenow': String(Math.min(252, p.elapsed)), 'aria-label': 'Holding period' }, h('span', { style: 'width:' + (p.progress * 100).toFixed(1) + '%' })),
+        h('div', { class: 'meterlbl' }, h('span', { text: 'Sell ' + L.weekdayOf(p.sellDate) + ' ' + L.fmtDate(p.sellDate, { weekday: false, year: true }) + (p.sellSource === 'calendar' ? '' : ' (approx.)') }), h('b', { text: left }))));
+  }
+  function group(title, items, key, emptyText) {
+    var limit = (key === 'missed' || key === 'waiting') && !S.showAll[key] ? 6 : 500;
+    var shown = items.slice(0, limit);
+    var body = items.length ? h('ul', { class: 'rows' }, shown.map(function (it) { return h('li', null, pipeRow(it, key)); })) : h('p', { class: 'empty', text: emptyText });
+    var more = items.length > limit || (S.showAll[key] && items.length > 6) ? h('button', { type: 'button', class: 'linkbtn more-btn', onclick: function () { S.showAll[key] = !S.showAll[key]; renderSpinoffs(S.D); } }, S.showAll[key] ? 'Show fewer' : 'Show all ' + items.length) : null;
+    return h('section', { class: 'grp' }, h('div', { class: 'grp__h' }, h('h3', { text: title }), h('span', { class: 'tag', text: String(items.length) })), body, more);
+  }
+  /* engine notes carry ISO dates; show them the way the rest of the page does */
+  function humanDates(t) { return String(t || '').replace(/\b(\d{4}-\d{2}-\d{2})\b/g, function (m) { return L.isYMD(m) ? L.fmtDate(m, { weekday: false, year: true }) : m; }); }
+  function pipeNote(it, key) {
+    var r = it.raw, chk = it.check;
+    if (key === 'coming' || key === 'waiting') return ''; /* the dates line already says it */
+    if (key === 'open') return humanDates(r.note);
+    if (chk && chk.genuine === false) return ''; /* the check line explains it */
+    if (it.reason && it.reason.indexOf('You hid') === 0) return it.reason + '.';
+    if (r.status === 'skip' || r.status === 'not_new') return humanDates(r.note) || it.reason;
+    if (r.status === 'done') return 'Its 12 months ended' + (r.model_sell_date ? ' on ' + L.fmtDate(r.model_sell_date, { weekday: false, year: true }) : '') + '.';
+    if (r.buy_window_end) return 'Buy window closed ' + L.fmtDate(r.buy_window_end, { weekday: false, year: true }) + '. The rules never buy late, so leave it.';
+    return it.reason || humanDates(r.note);
+  }
+  function pipeRow(it, key) {
+    var r = it.raw, chk = it.check;
+    var dates = [];
+    if (r.form10_date) dates.push('Form 10 ' + L.fmtDate(r.form10_date, { weekday: false, year: true }));
+    if (r.first_trade) dates.push('First traded ' + L.fmtDate(r.first_trade, { weekday: false, year: true }));
+    if (r.buy_date && key !== 'waiting') dates.push((key === 'coming' ? 'Buy ' + L.weekdayOf(r.buy_date).slice(0, 3) + ' ' : 'Buy day ') + L.fmtDate(r.buy_date, { weekday: false, year: key !== 'coming' }));
+    if (r.buy_window_end && (key === 'open' || key === 'coming')) dates.push('window to ' + L.fmtDate(r.buy_window_end, { weekday: false }));
+    if (r.model_sell_date && key === 'missed' && (r.status === 'HOLD' || r.status === 'SELL')) dates.push('Model sell ' + L.fmtDate(r.model_sell_date, { weekday: false, year: true }));
+    var chip = null;
+    if (key === 'open') chip = it.pending ? h('span', { class: 'chip chip--info' }, 'Buy · price check pending') : h('span', { class: 'chip chip--buy' }, 'Buy now');
+    else if (key === 'missed') chip = h('span', { class: 'chip chip--plain', text: r.status === 'skip' ? 'Skipped' : r.status === 'not_new' ? 'Not new' : (chk && chk.genuine === false) ? 'Not genuine' : it.reason && it.reason.indexOf('You hid') === 0 ? 'Hidden' : 'Missed' });
+    var checkTxt = null;
+    if (chk) {
+      if (chk.genuine === true) checkTxt = 'Checked. ' + checkSentence(chk);
+      else if (chk.genuine === false) checkTxt = 'Not a genuine spin-off' + (chk.note ? ': ' + chk.note : '');
+      else checkTxt = 'Check unclear' + (chk.note ? ': ' + chk.note : '');
+    } else if (key === 'open' || key === 'coming') checkTxt = 'Not yet checked';
+    var note = pipeNote(it, key);
+    return h('div', { class: 'pipe' },
+      h('div', { class: 'pipe__top' }, it.ticker ? tickEl(it.ticker) : h('span', { class: 'tag', text: 'No ticker yet' }), h('span', { class: 'pipe__co', text: it.company }), r.exchange ? h('span', { class: 'tag', text: r.exchange }) : null, chip),
+      dates.length ? h('div', { class: 'pipe__dates' }, dates.map(function (d) { return h('span', { text: d }); })) : null,
+      checkTxt ? h('div', { class: 'pipe__note', text: checkTxt }) : null,
+      note ? h('div', { class: 'pipe__note', text: note }) : null,
+      h('div', { class: 'pipe__links' }, secLink(r.form10_url, it.id)));
+  }
+
+  /* ---------- RECORDS ---------- */
+  function renderRecords(D) {
+    var mAmt = D.settings.monthly_deposit;
+    $('depQuick').textContent = 'Add this month’s ' + money(mAmt);
+    var dd = $('depDate'), td = $('tradeDate');
+    dd.max = maxRecordDate(); td.max = maxRecordDate();
+    if (!dd.value) dd.value = todayUK();
+    syncSettingsForm(D);
+    $('helpSlice').textContent = '1/' + D.settings.slice;
+    renderTradeList(D);
+    renderDepositList(D);
+    renderDismissed(D);
+    $('recDownloadBlock').hidden = !S.downloads;
+  }
+  function recRow(col, rec, main, what) {
+    var key = col + '/' + rec.id;
+    var del = h('button', { type: 'button', class: 'btn btn--quiet btn--small', disabled: !canWrite(), 'aria-label': 'Delete ' + what, onclick: function () { S.pendingDelete = key; renderRecords(S.D); var y = $('del-yes-' + rec.id); if (y) y.focus(); } }, 'Delete');
+    var li = h('li', { class: 'rec' }, h('div', { class: 'rec__main' }, main), del);
+    if (S.pendingDelete === key) {
+      li.appendChild(h('div', { class: 'rec__confirm', role: 'group', 'aria-label': 'Confirm delete' },
+        h('span', { text: 'Delete this ' + what + '? This can’t be undone.' }),
+        h('button', { type: 'button', class: 'btn btn--danger btn--small', id: 'del-yes-' + rec.id, onclick: function () {
+          S.pendingDelete = null;
+          removeDoc(col, rec.id, 'the change').then(function () { toast('Deleted.'); }).catch(function () {});
+          renderRecords(S.D);
+        } }, 'Delete'),
+        h('button', { type: 'button', class: 'btn btn--small', onclick: function () { S.pendingDelete = null; renderRecords(S.D); } }, 'Keep')));
+    }
+    return li;
+  }
+  function renderTradeList(D) {
+    var list = D.trades.slice().reverse();
+    if (!list.length) { fill('recTrades', h('p', { class: 'empty' }, 'No trades yet. Tap Record a trade after you buy or sell a spin-off.')); return; }
+    var lim = S.showAll.trades ? 1000 : 10;
+    var ul = h('ul', { class: 'rows' }, list.slice(0, lim).map(function (t) {
+      return recRow('trades', t, [
+        h('span', { class: 'rec__date', text: L.fmtDate(t.date, { weekday: false, year: true }) }),
+        h('span', { class: 'chip ' + (t.type === 'buy' ? 'chip--buy' : 'chip--sell'), text: t.type === 'buy' ? 'Buy' : 'Sell' }),
+        tickEl(t.ticker),
+        h('span', { class: 'num small fg2', text: L.fmtShares(t.shares) + ' sh' }),
+        h('span', { class: 'rec__amt', text: money(t.amount_gbp) }),
+        t.note ? h('span', { class: 'rec__note', text: t.note }) : null
+      ], 'trade');
+    }));
+    fill('recTrades', [ul, list.length > 10 ? h('button', { type: 'button', class: 'linkbtn more-btn', onclick: function () { S.showAll.trades = !S.showAll.trades; renderTradeList(S.D); } }, S.showAll.trades ? 'Show fewer' : 'Show all ' + list.length) : null]);
+  }
+  function renderDepositList(D) {
+    var list = D.deposits.slice().reverse();
+    if (!list.length) { fill('recDeposits', h('p', { class: 'empty' }, 'No deposits yet. Log the money already in your account as your first deposit.')); return; }
+    var total = D.deposits.reduce(function (s, d) { return s + d.amount_gbp; }, 0);
+    var lim = S.showAll.deposits ? 1000 : 10;
+    var ul = h('ul', { class: 'rows' }, list.slice(0, lim).map(function (d) {
+      return recRow('deposits', d, [
+        h('span', { class: 'rec__date', text: L.fmtDate(d.date, { weekday: false, year: true }) }),
+        h('span', { class: 'rec__amt ' + (d.amount_gbp < 0 ? 'neg' : ''), text: d.amount_gbp < 0 ? money(d.amount_gbp) + ' out' : money(d.amount_gbp) }),
+        d.note ? h('span', { class: 'rec__note', text: d.note }) : null
+      ], d.amount_gbp < 0 ? 'withdrawal' : 'deposit');
+    }));
+    fill('recDeposits', [h('p', { class: 'small fg2', style: 'margin:0 0 6px' }, 'Total paid in: ', h('b', { class: 'num', text: money(total) })), ul,
+      list.length > 10 ? h('button', { type: 'button', class: 'linkbtn more-btn', onclick: function () { S.showAll.deposits = !S.showAll.deposits; renderDepositList(S.D); } }, S.showAll.deposits ? 'Show fewer' : 'Show all ' + list.length) : null]);
+  }
+  function renderDismissed(D) {
+    var dm = D.settings.dismissed, keys = Object.keys(dm).sort();
+    if (!keys.length) { fill('recDismissed', h('p', { class: 'empty small' }, 'None. Spin-offs you mark as not on Trading 212 or skip are listed here.')); return; }
+    var ul = h('ul', { class: 'rows' }, keys.map(function (k) {
+      return h('li', { class: 'rec' }, h('div', { class: 'rec__main' }, tickEl(k), h('span', { class: 'small fg2', text: dm[k] })),
+        h('button', { type: 'button', class: 'btn btn--quiet btn--small', disabled: !canWrite(), onclick: function () { saveSettings(function (s) { delete s.dismissed[k]; }, 'that change').then(function () { toast(k + ' is back in the list.'); }).catch(function () {}); } }, 'Show again'));
+    }));
+    var clear;
+    if (S.pendingDelete === 'dismissed/all') {
+      clear = h('div', { class: 'rec__confirm' }, h('span', null, 'Show all ' + keys.length + ' again?'),
+        h('button', { type: 'button', class: 'btn btn--danger btn--small', onclick: function () { S.pendingDelete = null; saveSettings(function (s) { s.dismissed = {}; }, 'that change').then(function () { toast('Hidden list cleared.'); }).catch(function () {}); renderDismissed(S.D); } }, 'Clear list'),
+        h('button', { type: 'button', class: 'btn btn--small', onclick: function () { S.pendingDelete = null; renderDismissed(S.D); } }, 'Keep'));
+    } else clear = h('button', { type: 'button', class: 'linkbtn more-btn', disabled: !canWrite(), onclick: function () { S.pendingDelete = 'dismissed/all'; renderDismissed(S.D); } }, 'Clear the hidden list');
+    fill('recDismissed', [ul, clear]);
+  }
+
+  var settingsDirty = false;
+  function syncSettingsForm(D) {
+    if (settingsDirty) return;
+    var st = D.settings;
+    $('setFundVUAG').checked = st.index_fund === 'VUAG';
+    $('setFundEQQQ').checked = st.index_fund === 'EQQQ';
+    var risk = L.riskLevel(st.slice);
+    $('setRisk8').checked = risk.key === '8';
+    $('setRisk27').checked = risk.key === '27';
+    $('setRiskCustom').checked = risk.key === 'custom';
+    $('setSlice').value = String(st.slice);
+    $('setSliceField').hidden = risk.key !== 'custom';
+    $('setMonthly').value = st.monthly_deposit.toFixed(2);
+  }
+  function chosenSlice() {
+    if ($('setRisk8').checked) return 8;
+    if ($('setRisk27').checked) return 27;
+    var raw = String($('setSlice').value || '').trim();
+    return /^\d+$/.test(raw) ? Number(raw) : NaN;
+  }
+  function fieldErr(id, msg) {
+    var e = $(id + 'Err'), inp = $(id);
+    if (e) { e.textContent = msg || ''; e.hidden = !msg; }
+    if (inp) { if (msg) { inp.setAttribute('aria-invalid', 'true'); inp.setAttribute('aria-describedby', id + 'Err'); } else { inp.removeAttribute('aria-invalid'); inp.removeAttribute('aria-describedby'); } }
+  }
+
+  function initForms() {
+    /* deposit */
+    $('depForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!canWrite()) return;
+      var kind = $('depKindOut').checked ? 'out' : 'in';
+      var r = L.validateDeposit({ date: $('depDate').value, amount: $('depAmount').value, note: $('depNote').value, kind: kind }, maxRecordDate());
+      fieldErr('depDate', r.errors.date); fieldErr('depAmount', r.errors.amount);
+      if (!r.ok) { $(r.errors.date ? 'depDate' : 'depAmount').focus(); return; }
+      var btn = $('depSubmit'); btn.disabled = true;
+      addDeposit(r.value).then(function (ref) {
+        $('depAmount').value = ''; $('depNote').value = '';
+        toast((kind === 'out' ? 'Withdrawal of ' : 'Deposit of ') + money(Math.abs(r.value.amount_gbp)) + ' saved.', { undo: function () { removeDoc('deposits', ref.id, 'the undo').catch(function () {}); } });
+      }).catch(function () {}).then(function () { btn.disabled = !canWrite(); });
+    });
+    $('depQuick').addEventListener('click', quickDeposit);
+    /* trade sheet */
+    $('recAddTrade').addEventListener('click', function (e) { openTrade({}, e.currentTarget); });
+    $('tradeCancel').addEventListener('click', closeTrade);
+    $('tradeCancelX').addEventListener('click', closeTrade);
+    $('sheet').addEventListener('click', function (e) { if (e.target === $('sheet')) closeTrade(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('sheet').hidden) { e.preventDefault(); closeTrade(); } });
+    $('sheet').addEventListener('keydown', function (e) {
+      if (e.key === 'Tab') {
+        var f = Array.prototype.filter.call($('sheet').querySelectorAll('button,input,select,textarea,a[href]'), function (x) { return !x.disabled && x.offsetParent !== null && !(x.type === 'radio' && !x.checked); });
+        if (!f.length) return;
+        var first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
+    ['tradeTypeBuy', 'tradeTypeSell'].forEach(function (id) { $(id).addEventListener('change', tradeTypeLabels); });
+    $('tradeTicker').addEventListener('input', function (e) { var v = e.target.value, u = v.toUpperCase(); if (v !== u) { var p = e.target.selectionStart; e.target.value = u; try { e.target.setSelectionRange(p, p); } catch (x) {} } });
+    $('tradeForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!canWrite()) return;
+      var r = L.validateTrade({ date: $('tradeDate').value, type: $('tradeTypeSell').checked ? 'sell' : 'buy', ticker: $('tradeTicker').value, shares: $('tradeShares').value, amount_gbp: $('tradeAmount').value, note: $('tradeNote').value }, maxRecordDate());
+      fieldErr('tradeDate', r.errors.date); fieldErr('tradeTicker', r.errors.ticker); fieldErr('tradeShares', r.errors.shares); fieldErr('tradeAmount', r.errors.amount_gbp);
+      var fe = $('tradeFormErr'); fe.hidden = true;
+      if (!r.ok) { var firstBad = ['date', 'ticker', 'shares', 'amount_gbp'].filter(function (k) { return r.errors[k]; })[0]; $({ date: 'tradeDate', ticker: 'tradeTicker', shares: 'tradeShares', amount_gbp: 'tradeAmount' }[firstBad]).focus(); return; }
+      var v = r.value;
+      if (v.type === 'sell') {
+        var held = S.D ? S.D.open.filter(function (p) { return p.ticker === v.ticker; })[0] : null;
+        if (!held) { fe.textContent = 'You have no open ' + v.ticker + ' position in your records. Log the buy first.'; fe.hidden = false; return; }
+        if (v.shares > held.shares + 1e-6) { fieldErr('tradeShares', 'You hold ' + L.fmtShares(held.shares) + ' shares of ' + v.ticker + '.'); $('tradeShares').focus(); return; }
+      }
+      var btn = $('tradeSubmit'); btn.disabled = true;
+      addTrade(v).then(function (ref) {
+        closeTrade();
+        toast((v.type === 'buy' ? 'Bought ' : 'Sold ') + L.fmtShares(v.shares) + ' ' + v.ticker + ' for ' + money(v.amount_gbp) + '. Saved.', { undo: function () { removeDoc('trades', ref.id, 'the undo').catch(function () {}); } });
+      }).catch(function () { fe.textContent = 'Not saved. See the message below.'; fe.hidden = false; }).then(function () { btn.disabled = !canWrite(); });
+    });
+    /* settings */
+    ['setRisk8', 'setRisk27', 'setRiskCustom'].forEach(function (id) {
+      $(id).addEventListener('change', function () {
+        var custom = $('setRiskCustom').checked;
+        $('setSliceField').hidden = !custom;
+        if (!custom) fieldErr('setSlice', '');
+        if (custom && id === 'setRiskCustom') { if (!$('setSlice').value) $('setSlice').value = String(S.D ? S.D.settings.slice : 8); setTimeout(function () { $('setSlice').focus(); try { $('setSlice').select(); } catch (e) {} }, 0); }
+      });
+    });
+    ['setFundVUAG', 'setFundEQQQ', 'setRisk8', 'setRisk27', 'setRiskCustom', 'setSlice', 'setMonthly'].forEach(function (id) { $(id).addEventListener('input', function () { settingsDirty = true; $('setMsg').textContent = 'Unsaved changes'; }); $(id).addEventListener('change', function () { settingsDirty = true; $('setMsg').textContent = 'Unsaved changes'; }); });
+    $('setForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!canWrite()) return;
+      var slice = chosenSlice(), monthly = L.parseAmount($('setMonthly').value);
+      var bad = false;
+      if (!L.validSlice(slice)) { fieldErr('setSlice', 'Use a whole number from ' + L.SLICE_MIN + ' to ' + L.SLICE_MAX + '.'); bad = true; } else fieldErr('setSlice', '');
+      if (!(monthly > 0)) { fieldErr('setMonthly', 'Enter an amount above £0.'); bad = true; } else fieldErr('setMonthly', '');
+      if (bad) { $(!L.validSlice(slice) ? 'setSlice' : 'setMonthly').focus(); return; }
+      var fund = $('setFundEQQQ').checked ? 'EQQQ' : 'VUAG';
+      saveSettings(function (s) { s.index_fund = fund; s.slice = slice; s.monthly_deposit = Math.round(monthly * 100) / 100; }).then(function () {
+        settingsDirty = false; $('setMsg').textContent = 'Saved'; toast('Settings saved.');
+      }).catch(function () {});
+    });
+    /* downloads */
+    $('recDownload').addEventListener('click', function () {
+      if (!S.downloads) return;
+      var csv = L.recordsCSV(docs('deposits'), docs('trades'));
+      var msg = $('recDownloadMsg'); msg.textContent = '';
+      S.downloads.save({ filename: 'spinoff-records-' + todayUK() + '.csv', data: csv }).then(function () { msg.textContent = 'Downloaded.'; }).catch(function (e) {
+        var c = e && e.code;
+        msg.textContent = c === 'declined' ? 'Download cancelled.' : c === 'rate_limited' ? 'A download is already waiting for your answer.' : 'Downloads aren’t available here.';
+      });
+    });
+  }
+  function quickDeposit() {
+    if (!canWrite() || !S.D) return;
+    var amt = S.D.settings.monthly_deposit;
+    var v = { date: todayUK() > maxRecordDate() ? maxRecordDate() : todayUK(), amount_gbp: Math.round(amt * 100) / 100, note: 'Monthly deposit' };
+    addDeposit(v).then(function (ref) {
+      toast('Deposit of ' + money(v.amount_gbp) + ' saved for ' + L.fmtDate(v.date) + '.', { undo: function () { removeDoc('deposits', ref.id, 'the undo').catch(function () {}); } });
+    }).catch(function () {});
+  }
+
+  var sheetOpener = null;
+  function tradeTypeLabels() {
+    var sell = $('tradeTypeSell').checked;
+    $('tradeAmountLbl').textContent = sell ? 'Total received (£)' : 'Total paid (£)';
+    $('tradeAmountHint').textContent = sell ? 'After the 0.15% FX fee' : 'Including the 0.15% FX fee';
+  }
+  function openTrade(pre, opener) {
+    if (!canWrite()) return;
+    sheetOpener = opener || document.activeElement;
+    $('tradeTypeSell').checked = pre.type === 'sell'; $('tradeTypeBuy').checked = pre.type !== 'sell';
+    $('tradeDate').value = todayUK() > maxRecordDate() ? maxRecordDate() : todayUK();
+    $('tradeDate').max = maxRecordDate();
+    $('tradeTicker').value = pre.ticker || '';
+    $('tradeShares').value = pre.shares || '';
+    $('tradeAmount').value = pre.amount || '';
+    $('tradeNote').value = '';
+    $('tradeHint').textContent = pre.hint || 'Enter the trade as shown on the Trading 212 order confirmation.';
+    $('sheetTitle').textContent = pre.type === 'sell' ? 'Record a sale' : pre.type === 'buy' ? 'Record a purchase' : 'Record a trade';
+    ['tradeDate', 'tradeTicker', 'tradeShares', 'tradeAmount'].forEach(function (id) { fieldErr(id, ''); });
+    $('tradeFormErr').hidden = true;
+    tradeTypeLabels();
+    $('sheet').hidden = false;
+    var target = !pre.ticker ? 'tradeTicker' : !pre.shares ? 'tradeShares' : 'tradeAmount';
+    setTimeout(function () { $(target).focus(); }, 20);
+  }
+  function closeTrade() {
+    $('sheet').hidden = true;
+    if (sheetOpener && document.body.contains(sheetOpener)) { try { sheetOpener.focus(); } catch (e) {} }
+    sheetOpener = null;
+  }
+
+  /* ---------- boot ---------- */
+  function boot() {
+    var c = window.claude;
+    if (!c || typeof c.use !== 'function') { S.phase = 'absent'; renderAll(); return; }
+    var safe = function (name) { try { return Promise.resolve(c.use(name)).catch(function () { return null; }); } catch (e) { return Promise.resolve(null); } };
+    safe('user').then(function (u) {
+      S.user = u;
+      if (u && typeof u.can === 'function') return u.can('data.write').then(function (v) { S.canWrite = v; invalidate(); }, function () {});
+    });
+    safe('downloads').then(function (d) { S.downloads = d; invalidate(); });
+    safe('mcp').then(function (m) { S.mcp = m; invalidate(); });
+    safe('db').then(function (db) {
+      if (!db) { S.phase = 'absent'; renderAll(); return; }
+      S.db = db; S.phase = 'ready';
+      COLLECTIONS.forEach(function (name) {
+        try {
+          db.collection(name).limit(1000).onSnapshot(function (snap) {
+            var m = {};
+            snap.docs.forEach(function (d) { if (d.exists) m[d.id] = d.data(); });
+            S.data[name] = m; S.loaded[name] = true; delete S.subErr[name];
+            invalidate();
+          }, function (err) {
+            S.subErr[name] = (err && err.code) || 'error';
+            if (err && (err.code === 'revoked' || err.code === 'not_granted')) S.readOnly = true;
+            invalidate();
+          });
+        } catch (e) { S.subErr[name] = 'error'; }
+      });
+      invalidate();
+    });
+  }
+
+  initTabs();
+  initForms();
+  if (window.ResizeObserver) { var lastW = 0; new ResizeObserver(function (en) { var w = Math.round(en[0].contentRect.width); if (w !== lastW) { lastW = w; if (S.tab === 'performance') drawChartSoon(); } }).observe($('chart')); }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { S.dirty = true; invalidate(); } });
+  setInterval(function () { var t = todayNY(); if (S.D && S.D.today !== t) { S.dirty = true; invalidate(); } }, 60000);
+  renderAll();
+  boot();
+})();
+</script>
