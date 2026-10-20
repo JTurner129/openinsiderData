@@ -79,9 +79,10 @@ and write again.
 
 Read `/tmp/spin/out/alerts.json`.
 
-- If `noteworthy` is true, first send the phone alert through ntfy (the topic is given in the scheduled
-  task's prompt):
-  `curl -s -H "Title: Spin-off tracker" -H "Priority: high" -d "<push text>" https://ntfy.sh/<TOPIC>`
+- If `noteworthy` is true, first send the phone alert by Telegram (the bot token and chat id are given
+  in the scheduled task's prompt; never write them to a file):
+  `curl -s "https://api.telegram.org/bot<TOKEN>/sendMessage" --data-urlencode "chat_id=<CHAT_ID>" --data-urlencode "text=<push text>"`
+  and check the reply contains `"ok":true`.
 - If `noteworthy` is true: call PushNotification with the `push` text, then finish with a short message:
   the `lines`, one per line, and the tracker link.
 - Otherwise finish with one line: the `push` text (it can say the scan was incomplete), plus anything
@@ -90,5 +91,5 @@ Read `/tmp/spin/out/alerts.json`.
 ## 8. If something failed
 
 Still try to tell the page: write `market/status` (read its version first with ArtifactData `get`) with
-`scan_ok: false` and the error in `errors`, keeping the other fields. Then send "Spin-off tracker check failed: <short reason>" through ntfy as in step 7 and call PushNotification with
+`scan_ok: false` and the error in `errors`, keeping the other fields. Then send "Spin-off tracker check failed: <short reason>" by Telegram as in step 7 and call PushNotification with
 the same text and finish with what failed and what you tried.
