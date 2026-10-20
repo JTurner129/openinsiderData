@@ -11,7 +11,7 @@ import vm from 'node:vm';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
-const DOCS = arg('--docs', '/tmp/claude-0/-home-user/cfe4416a-1a27-57e3-996d-df500b1ef602/scratchpad/trk_real_docs');
+const DOCS = arg('--docs', '/tmp/claude-0/-home-user/cfe4416a-1a27-57e3-996d-df500b1ef602/scratchpad/trk_real_docs2');
 const OUT = arg('--out', join(here, 'real_records.json'));
 
 const html = readFileSync(join(here, 'spinoff_tracker.html'), 'utf8');

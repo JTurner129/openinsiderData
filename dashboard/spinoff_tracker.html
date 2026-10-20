@@ -6,7 +6,7 @@
    From 900px the Today and Records tabs split into a wide action column and a narrow side column.
    Calm ledger look: white panels only where a block is an object (action, chart, form); rows elsewhere. */
 :root{
-  --bg:#f6f7f6; --panel:#ffffff; --fg:#151816; --fg2:#4b514d; --muted:#767d78; --rule:#dce0dd; --grid:#e8ebe9;
+  --bg:#f6f7f6; --panel:#ffffff; --fg:#151816; --fg2:#4b514d; --muted:#646b66; --rule:#dce0dd; --grid:#e8ebe9;
   --pos:#1d7a43; --neg:#b23a32; --warn:#8a5a00; --link:#1f63b8; --focus:#2a78d6;
   --pos-soft:#e4f1e8; --neg-soft:#f7e5e3; --warn-soft:#f5ecd4; --info-soft:#e6eef8;
   --s-you:#2a78d6; --s-sp:#eb6834; --s-nq:#1baf7a; --s-in:#767d78;
@@ -35,6 +35,7 @@
   color-scheme:dark;
 }
 html{-webkit-text-size-adjust:100%}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--body);}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
 *,*::before,*::after{box-sizing:border-box}
@@ -62,6 +63,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 @media (min-width:640px){.tab{flex:0 0 auto;padding-inline:14px}}
 
 main.wrap{padding-block:16px 56px}
+#globalNotice{margin-bottom:24px}
 .tabpanel{display:flex;flex-direction:column;gap:24px}
 .cols{display:grid;grid-template-columns:minmax(0,1fr);gap:24px}
 .cols>*{min-width:0;display:flex;flex-direction:column;gap:24px}
@@ -97,6 +99,8 @@ main.wrap{padding-block:16px 56px}
 .chip--info{background:var(--info-soft);color:var(--link)}
 .chip--plain{background:var(--grid);color:var(--fg2)}
 .tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:4px;background:var(--grid);color:var(--fg2);white-space:nowrap}
+.tag--warn{background:var(--warn-soft);color:var(--warn);white-space:normal}
+.depdone{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
 
 /* status line + banners */
 .statusline{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;font-size:13px;color:var(--fg2)}
@@ -140,9 +144,28 @@ details.steps{border-top:1px solid var(--rule);padding-top:8px}
 details.steps summary,details.more summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--fg2);list-style-position:inside}
 details.steps ol{margin:8px 0 0;padding-left:22px;display:flex;flex-direction:column;gap:6px;font-size:14px}
 details.steps li::marker{font-family:var(--mono);color:var(--muted)}
-.todayplan h3{margin:0 0 6px;font-size:16px}
-.todayplan ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px;font-size:15px}
-.todayplan li::marker{font-family:var(--mono);color:var(--muted)}
+.todayplan{display:flex;flex-direction:column;gap:10px}
+.todayplan h3{margin:0;font-size:16px}
+.planlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;font-size:15px}
+.pl{display:flex;gap:10px;align-items:flex-start}
+.pl__mark{flex:none;width:20px;height:20px;margin-top:1px;border-radius:50%;border:1.5px solid var(--muted);display:inline-flex;align-items:center;justify-content:center}
+.pl__mark svg{width:13px;height:13px}
+.pl--done .pl__mark{background:var(--pos);border-color:var(--pos);color:var(--panel)}
+.pl--info .pl__mark{border-style:dashed}
+.pl--skip .pl__mark{border-style:dashed;color:var(--muted);font-weight:700;line-height:1}
+.pl--skip .pl__body{color:var(--fg2)}
+.pl__tag.pl__tag--skip{background:var(--grid);color:var(--fg2)}
+.pl--done .pl__body{color:var(--fg2)}
+.pl__body{min-width:0;display:flex;flex-direction:column;gap:4px}
+.pl__tag{margin-left:8px;background:var(--pos-soft);color:var(--pos)}
+.pl__note{font-size:13px;color:var(--fg2)}
+.pl__toggle{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--fg2);cursor:pointer;align-self:flex-start}
+.pl__toggle input{width:18px;height:18px;margin:0;accent-color:var(--pos)}
+.callout{display:flex;gap:10px;align-items:flex-start;border-radius:6px;padding:10px 12px;font-size:14px}
+.callout p{margin:0}
+.callout svg{flex:none;width:16px;height:16px;margin-top:2px}
+.callout--warn{background:var(--neg-soft)} .callout--warn svg{color:var(--neg)}
+.callout--info{background:var(--info-soft)} .callout--info svg{color:var(--link)}
 .closed{display:flex;flex-direction:column;gap:2px}
 .closed__top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
 .closed__top>span:first-child{min-width:0}
@@ -161,7 +184,9 @@ details.steps li::marker{font-family:var(--mono);color:var(--muted)}
 .vsrow{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--rule)}
 .vsrow>div{padding:10px 0;min-width:0}
 .vsrow>div+div{padding-left:14px;border-left:1px solid var(--rule)}
-.vsrow .v{font:600 17px/1.3 var(--mono)}
+.vsrow .v{font:500 14px/1.35 var(--body);color:var(--fg2)}
+.vsrow .v .num{font:600 17px/1.3 var(--mono);display:block}
+.hero-date{font-size:13px}
 .vsrow .k{font-size:12px;color:var(--muted)}
 .keyline{display:inline-block;width:14px;height:0;border-top:2px solid currentColor;vertical-align:4px;margin-right:6px}
 .k-you{color:var(--s-you)} .k-sp{color:var(--s-sp)} .k-nq{color:var(--s-nq)} .k-in{color:var(--s-in)}
@@ -200,14 +225,14 @@ details.steps li::marker{font-family:var(--mono);color:var(--muted)}
 .chart svg{display:block;width:100%;height:auto;overflow:visible}
 .chart .gridline{stroke:var(--grid);stroke-width:1;shape-rendering:crispEdges}
 .chart .axis{stroke:var(--rule);stroke-width:1;shape-rendering:crispEdges}
-.chart .tl{fill:var(--muted);font:11px var(--body);font-variant-numeric:tabular-nums}
+.chart .tl{fill:var(--muted);font:12px var(--body);font-variant-numeric:tabular-nums}
 .chart .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 .chart .ln-you{stroke:var(--s-you)} .chart .ln-sp{stroke:var(--s-sp)} .chart .ln-nq{stroke:var(--s-nq)}
 .chart .ln-in{stroke:var(--s-in);stroke-width:1.5;stroke-dasharray:4 4}
 .chart .area-you{fill:var(--s-you);opacity:.08;stroke:none}
 .chart .end-you{fill:var(--s-you)} .chart .end-sp{fill:var(--s-sp)} .chart .end-nq{fill:var(--s-nq)} .chart .end-in{fill:var(--s-in)}
 .chart .ring{stroke:var(--panel);stroke-width:2}
-.chart .elab{font:11px var(--body);fill:var(--fg2)}
+.chart .elab{font:12px var(--body);fill:var(--fg2)}
 .chart .elab .ev{font-family:var(--mono);fill:var(--fg);font-weight:600}
 .chart .leader{stroke:var(--muted);stroke-width:1}
 .chart .xh{stroke:var(--fg2);stroke-width:1;shape-rendering:crispEdges}
@@ -217,6 +242,10 @@ details.steps li::marker{font-family:var(--mono);color:var(--muted)}
 .tip__r{display:flex;align-items:center;gap:8px;line-height:1.6}
 .tip__r .v{font:600 13px var(--mono);margin-left:auto;order:2}
 .tip__r .n{color:var(--fg2);order:1}
+.tip--strip{position:static;transform:none;box-shadow:none;min-width:0;margin-bottom:8px;padding:8px 10px;background:var(--bg)}
+.tip--strip .tip__rows{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+.tip--strip .tip__r{gap:6px;min-width:0}
+.tip--strip .tip__r .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
 .stats>div{background:var(--panel);padding:12px 14px;min-width:0}
 .stats .k{font-size:12px;color:var(--muted)}
@@ -312,6 +341,21 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
 .toast button{appearance:none;background:none;border:0;color:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:4px}
 .toast--bad{background:var(--neg-soft);color:var(--fg);border:1px solid var(--neg)}
 
+/* phone: every control is at least 44px tall (WCAG 2.5.5 / Apple HIG) */
+@media (max-width:599px){
+  .btn,.btn--small{min-height:44px}
+  .seg label{min-height:44px}
+  .toast button{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center}
+  .linkbtn{display:inline-flex;align-items:center;min-height:44px}
+  details.steps summary,details.more summary{padding-block:11px;min-height:44px}
+  details.steps{padding-top:0}
+  .pipe__links a,.facts dd a,.help a.biglink{display:inline-flex;align-items:center;min-height:44px}
+  .radio{padding-block:11px;min-height:44px}
+  .radios{gap:0}
+  .pl__toggle{min-height:44px}
+  .tab{min-height:44px}
+}
+
 @media (prefers-reduced-motion: no-preference){
   .toast{animation:rise .18s ease-out}
   @keyframes rise{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
@@ -359,16 +403,16 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   <section class="tabpanel" id="panel-performance" role="tabpanel" aria-labelledby="tab-performance" hidden>
     <div class="block">
       <h2 class="sec">How you're doing</h2>
-      <p class="sub">Your account against putting the same deposits, on the same dates, into one index fund and doing nothing else.</p>
+      <p class="sub">Your account (You) against putting the same deposits, on the same dates, into one index fund and doing nothing else.</p>
       <div id="perfHead"></div>
     </div>
     <div class="panel block">
       <div class="sec-row"><h2 class="sec">Account value</h2><span class="small muted" id="chartAsOf"></span></div>
       <ul class="legend" id="chartLegend" aria-label="Chart key">
-        <li><span class="keyline k-you"></span>Your account</li>
-        <li><span class="keyline k-sp"></span>S&amp;P 500 fund only</li>
-        <li><span class="keyline k-nq"></span>Nasdaq-100 fund only</li>
-        <li><span class="keyline k-in"></span>Money in</li>
+        <li><span class="keyline k-you"></span>You</li>
+        <li><span class="keyline k-sp"></span>S&amp;P 500 fund</li>
+        <li><span class="keyline k-nq"></span>Nasdaq-100 fund</li>
+        <li><span class="keyline k-in"></span>Paid in</li>
       </ul>
       <div id="chart" class="chart" tabindex="0" role="group" aria-label="Account value over time. Use the left and right arrow keys to read values."></div>
       <details class="more" data-key="charttable">
@@ -402,7 +446,8 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       <div>
         <div class="panel block">
           <h2 class="sec">Add money</h2>
-          <div class="btns"><button type="button" class="btn btn--primary" id="depQuick">Add this month's £1,666.66</button></div>
+          <div class="btns" id="depQuickRow"><button type="button" class="btn btn--primary" id="depQuick">Add this month's £1,666.66</button></div>
+          <div class="depdone" id="depDoneRow" hidden><p class="small fg2" id="depDone" style="margin:0"></p><button type="button" class="btn" id="depAnother" aria-controls="depForm" aria-expanded="false">Add another deposit</button></div>
           <form class="form" id="depForm" novalidate>
             <fieldset class="fs">
               <legend>Type</legend>
@@ -412,12 +457,12 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
               </div>
             </fieldset>
             <div class="frow">
-              <div class="field"><label for="depDate">Date</label><input type="date" id="depDate" name="depDate" required><span class="err" id="depDateErr" hidden></span></div>
+              <div class="field"><label for="depDate">Date</label><input type="date" id="depDate" name="depDate" min="2000-01-01" required><span class="err" id="depDateErr" hidden></span></div>
               <div class="field"><label for="depAmount">Amount (£)</label><input type="text" inputmode="decimal" id="depAmount" name="depAmount" autocomplete="off" placeholder="1,666.66"><span class="err" id="depAmountErr" hidden></span></div>
             </div>
             <div class="field"><label for="depNote">Note (optional)</label><input type="text" id="depNote" name="depNote" maxlength="200" autocomplete="off"></div>
             <div class="btns"><button type="submit" class="btn" id="depSubmit">Add to records</button></div>
-            <p class="small muted" style="margin:0">Starting out? Log the money already in your account as your first deposit, dated the day you opened the tracker.</p>
+            <p class="small muted" id="depStartHint" style="margin:0">Starting out? Log the money already in your account as your first deposit, dated the day you opened the tracker.</p>
           </form>
         </div>
 
@@ -454,7 +499,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
                 <label class="radio" for="setRisk27"><input type="radio" name="setRisk" id="setRisk27" value="27"><span><b>Lower risk, 1/27 each</b><span class="radio__d">About 30% in spin-offs and 70% stays in the index fund. Backtest about 15% a year against 11% for the S&amp;P alone, worst fall about the same as the S&amp;P.</span></span></label>
                 <label class="radio" for="setRiskCustom"><input type="radio" name="setRisk" id="setRiskCustom" value="custom"><span><b>Custom</b><span class="radio__d">Any whole number from 4 to 40. A bigger number puts less in each spin-off and keeps more in the index fund.</span></span></label>
               </div>
-              <div class="field field--inset" id="setSliceField" hidden><label for="setSlice">Each spin-off gets 1 out of</label><input type="number" id="setSlice" min="4" max="40" step="1" inputmode="numeric"><span class="hint">Whole number, 4 to 40</span><span class="err" id="setSliceErr" hidden></span></div>
+              <div class="field field--inset" id="setSliceField" hidden><label for="setSlice">Each spin-off gets 1 out of</label><input type="number" id="setSlice" min="1" step="1" inputmode="numeric"><span class="hint" id="setSliceHint">Whole number, 4 to 40</span><span class="err" id="setSliceErr" hidden></span></div>
             </fieldset>
             <div class="field"><label for="setMonthly">Monthly deposit (£)</label><input type="text" inputmode="decimal" id="setMonthly" autocomplete="off"><span class="err" id="setMonthlyErr" hidden></span></div>
             <div class="btns"><button type="submit" class="btn" id="setSave">Save settings</button><span class="small muted" id="setMsg"></span></div>
@@ -484,7 +529,8 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
           <h3>What the page does</h3>
           <p>A scheduled check scans SEC filings and prices <span id="helpSchedule">every weekday morning</span> and writes the results here. This page turns them into today's actions and compares your account with putting the same deposits into an S&amp;P 500 or Nasdaq-100 fund. It counts every pound that isn't in a spin-off as held in your index fund. If you choose EQQQ, reinvest its dividends so the numbers match.</p>
           <p>Times are UK time. The US market opens at 14:30 UK time for most of the year and 13:30 for a few weeks in March and late October to early November, when the clocks change on different dates. Trading 212 charges 0.15% to convert pounds to dollars.</p>
-          <p><a href="https://claude.ai/artifact/J4apGniHiKu6SyBgqV3coT" target="_blank" rel="noopener">Read the research report behind these rules</a>. Past results don't guarantee future returns.</p>
+          <p><a class="biglink" href="https://claude.ai/artifact/J4apGniHiKu6SyBgqV3coT" target="_blank" rel="noopener">Read the research report behind these rules</a></p>
+          <p>Past results don't guarantee future returns.</p>
         </div>
       </div>
     </div>
@@ -504,8 +550,8 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
         </div>
       </fieldset>
       <div class="frow">
-        <div class="field"><label for="tradeDate">Date</label><input type="date" id="tradeDate" required><span class="err" id="tradeDateErr" hidden></span></div>
-        <div class="field"><label for="tradeTicker">Ticker</label><input type="text" id="tradeTicker" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="12" placeholder="e.g. CLDR"><span class="err" id="tradeTickerErr" hidden></span></div>
+        <div class="field"><label for="tradeDate">Date</label><input type="date" id="tradeDate" min="2000-01-01" required><span class="err" id="tradeDateErr" hidden></span></div>
+        <div class="field"><label for="tradeTicker">Ticker</label><input type="text" id="tradeTicker" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="12" placeholder="e.g. CLDR" aria-describedby="tradeTickerHint"><span class="hint" id="tradeTickerHint">Class shares with a dash, e.g. BRK-B</span><span class="err" id="tradeTickerErr" hidden></span></div>
       </div>
       <div class="frow">
         <div class="field"><label for="tradeShares">Shares</label><input type="text" inputmode="decimal" id="tradeShares" autocomplete="off" placeholder="e.g. 41.2371"><span class="err" id="tradeSharesErr" hidden></span></div>
@@ -529,6 +575,16 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   'use strict';
   var EPS = 1e-6;
   var HOLD_DAYS = 252;
+  /* the engine's rule (spinoff_tracker.py DUST): a sell that leaves less than 0.5% of the shares closes the
+     position, because Trading 212 shows about 7 decimals and a sell typed with fewer leaves a tiny remainder */
+  var DUST = 0.005;
+  /* the index-fund pot may dip this far below zero on a day (selling all of the fund a little above that
+     day's close, as the trim plan asks) before the page calls it an overspend */
+  var POT_TOL_GBP = 25, POT_TOL_SHARE = 0.01;
+  /* records dated before this are typing errors (the engine's MIN_DATE) */
+  var MIN_DATE = '2000-01-01';
+  /* price documents that are not spin-offs: trades in them are never counted (the engine's RESERVED) */
+  var RESERVED = { VUAG: true, EQQQ: true, GBPUSD: true };
   var DEFAULTS = { index_fund: 'VUAG', slice: 8, monthly_deposit: 1666.66 };
   var SLICE_MIN = 4, SLICE_MAX = 40;
   /* the two risk levels the backtest describes; any other whole number from 4 to 40 is "custom" */
@@ -538,10 +594,15 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   ];
   function riskLevel(slice) {
     var hit = RISK_LEVELS.filter(function (r) { return r.slice === slice; })[0];
-    return hit ? { key: String(slice), name: hit.name, text: hit.text, slice: slice }
-      : { key: 'custom', name: 'Custom', slice: slice, text: 'Custom: each spin-off gets 1/' + slice + ' of the account. Not one of the two backtested settings.' };
+    if (hit) return { key: String(slice), name: hit.name, text: hit.text, slice: slice, outside: false };
+    var outside = !validSlice(slice);
+    return { key: 'custom', name: outside ? 'Custom, outside the tested range' : 'Custom', slice: slice, outside: outside,
+      text: 'Custom: each spin-off gets 1/' + slice + ' of the account. Not one of the two backtested settings' + (outside ? ', and outside the 4 to 40 range the settings offer.' : '.') };
   }
+  /* what the settings form offers */
   function validSlice(n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && n >= SLICE_MIN && n <= SLICE_MAX; }
+  /* what the engine accepts in a stored document (clean_settings): any whole number from 1 */
+  function validStoredSlice(n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && n >= 1; }
   var FUNDS = {
     VUAG: { code: 'VUAG', name: 'Vanguard S&P 500 UCITS ETF (Acc)', short: 'S&P 500 fund' },
     EQQQ: { code: 'EQQQ', name: 'Invesco EQQQ Nasdaq-100 UCITS ETF', short: 'Nasdaq-100 fund' }
@@ -549,7 +610,8 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   var WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  var TICKER_RE = /^[A-Z0-9.\-]{1,12}$/;
+  /* tickers are stored the engine's way (norm_ticker): upper case, class shares with a dash (BRK.B -> BRK-B) */
+  var TICKER_RE = /^[A-Z0-9\-]{1,12}$/;
 
   /* ---------------- dates: always "YYYY-MM-DD" strings; UTC-noon Dates only for maths ---------------- */
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -593,6 +655,23 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     if (!isFinite(ms)) return '';
     var d = dateInZone(ms, 'Europe/London');
     return fmtDate(d) + ', ' + clockIn(ms, 'Europe/London');
+  }
+  /* "21:00" (or "20:00" while the clocks change on different dates): the 16:00 New York close in UK time */
+  function usCloseUK(dateStr) { return clockIn(zonedToUtc(dateStr, 16, 0, 'America/New_York'), 'Europe/London'); }
+  /* New York wall clock: 'pre' before 09:30, 'open' until 16:00, 'post' after the close */
+  function nyBucket(ms) { var p = zoneParts(ms, 'America/New_York'), m = p.H * 60 + p.M; return m < 570 ? 'pre' : m < 960 ? 'open' : 'post'; }
+  /* changes whenever the day's actions can change: the NY date, the NY open / close, the UK date */
+  function clockKey(ms) { return todayNY(ms) + '|' + nyBucket(ms) + '|' + todayLondon(ms); }
+  /* "Next check: Wed 21 Oct, 06:45 UK" from the engine's "Weekdays 06:45 UK time"; other text is kept as it is */
+  function nextCheckText(text, ms) {
+    var m = /^\s*weekdays\s+(\d{1,2}):(\d{2})\s+UK/i.exec(String(text || ''));
+    if (!m || !isFinite(ms)) return text ? 'Next check: ' + String(text).charAt(0).toLowerCase() + String(text).slice(1) : '';
+    var d = todayLondon(ms);
+    for (var i = 0; i < 8; i++, d = addDays(d, 1)) {
+      if (isWeekend(d)) continue;
+      if (zonedToUtc(d, +m[1], +m[2], 'Europe/London') > ms) return 'Next check: ' + fmtDate(d) + ', ' + pad2(+m[1]) + ':' + m[2] + ' UK';
+    }
+    return 'Next check: ' + String(text);
   }
 
   /* ---------------- sorted-array search ---------------- */
@@ -651,44 +730,78 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
 
   /* ---------------- records ---------------- */
   function cmpStr(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
-  function cleanTicker(s) { return String(s == null ? '' : s).trim().toUpperCase(); }
-  function cleanTrades(list) {
+  /* the engine's norm_ticker(): upper case, '.' -> '-' (BRK.B, brk-b and BRK-B are one ticker) */
+  function cleanTicker(s) { return String(s == null ? '' : s).trim().toUpperCase().replace(/\./g, '-'); }
+  function isReserved(t) { return RESERVED.hasOwnProperty(cleanTicker(t)); }
+  /* "YYYY-MM-DD" in shape; years below 1000 (an HTML date input turns a typed 26 into 0026) fail isYMD */
+  function isDateShape(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+  /* why a stored record is not counted, matching the engine (_user_date, as_of, RESERVED); null = counted */
+  function recordSkip(date, maxDate, ticker) {
+    if (date < MIN_DATE) return 'old';
+    if (maxDate && date > maxDate) return 'future';
+    if (ticker && RESERVED.hasOwnProperty(ticker)) return 'reserved';
+    return null;
+  }
+  /* well-formed trades, sorted; each carries skip (null when it counts). maxDate = the last date that counts. */
+  function cleanTrades(list, maxDate) {
     var out = [];
     (list || []).forEach(function (t) {
-      if (!t || !isYMD(t.date)) return;
+      if (!t || !isDateShape(t.date) || (!isYMD(t.date) && t.date >= MIN_DATE)) return;
       var type = t.type === 'buy' || t.type === 'sell' ? t.type : null;
       var ticker = cleanTicker(t.ticker);
       var shares = +t.shares, amt = +t.amount_gbp;
       if (!type || !TICKER_RE.test(ticker) || !(shares > 0) || !(amt > 0) || !isFinite(shares) || !isFinite(amt)) return;
-      out.push({ id: t.id || '', date: t.date, type: type, ticker: ticker, shares: shares, amount_gbp: amt, note: typeof t.note === 'string' ? t.note : '', created_at: typeof t.created_at === 'string' ? t.created_at : '' });
+      out.push({ id: t.id || '', date: t.date, type: type, ticker: ticker, shares: shares, amount_gbp: amt, note: typeof t.note === 'string' ? t.note : '', created_at: typeof t.created_at === 'string' ? t.created_at : '',
+        skip: recordSkip(t.date, maxDate, ticker) });
     });
     out.sort(function (a, b) { return cmpStr(a.date, b.date) || cmpStr(a.created_at, b.created_at) || cmpStr(a.id, b.id); });
     return out;
   }
-  function cleanDeposits(list) {
+  function cleanDeposits(list, maxDate) {
     var out = [];
     (list || []).forEach(function (d) {
-      if (!d || !isYMD(d.date)) return;
+      if (!d || !isDateShape(d.date) || (!isYMD(d.date) && d.date >= MIN_DATE)) return;
       var amt = +d.amount_gbp;
       if (!isFinite(amt) || amt === 0) return;
-      out.push({ id: d.id || '', date: d.date, amount_gbp: amt, note: typeof d.note === 'string' ? d.note : '', created_at: typeof d.created_at === 'string' ? d.created_at : '' });
+      out.push({ id: d.id || '', date: d.date, amount_gbp: amt, note: typeof d.note === 'string' ? d.note : '', created_at: typeof d.created_at === 'string' ? d.created_at : '',
+        skip: recordSkip(d.date, maxDate, null) });
     });
     out.sort(function (a, b) { return cmpStr(a.date, b.date) || cmpStr(a.created_at, b.created_at) || cmpStr(a.id, b.id); });
     return out;
   }
+  function counted(r) { return !r.skip; }
+  function normDismissed(dm) {
+    var out = {};
+    if (dm && typeof dm === 'object' && !Array.isArray(dm)) {
+      Object.keys(dm).forEach(function (k) { var t = cleanTicker(k); if (TICKER_RE.test(t)) out[t] = String(dm[k] || 'Hidden'); });
+    }
+    return out;
+  }
+  /* reads settings/main the way the engine's clean_settings does (slice: any whole number from 1) */
   function normSettings(s) {
     s = s || {};
     var fund = s.index_fund === 'EQQQ' ? 'EQQQ' : 'VUAG';
-    var slice = +s.slice;
-    if (!validSlice(slice)) slice = DEFAULTS.slice;
+    var slice = typeof s.slice === 'boolean' || s.slice == null || s.slice === '' ? NaN : +s.slice;
+    if (!validStoredSlice(slice)) slice = DEFAULTS.slice;
     var monthly = +s.monthly_deposit;
     if (!(monthly > 0)) monthly = DEFAULTS.monthly_deposit;
-    var dismissed = {};
-    if (s.dismissed && typeof s.dismissed === 'object') {
-      Object.keys(s.dismissed).forEach(function (k) { var t = cleanTicker(k); if (TICKER_RE.test(t)) dismissed[t] = String(s.dismissed[k] || 'Hidden'); });
+    var planDone = {};
+    if (s.plan_done && typeof s.plan_done === 'object') {
+      Object.keys(s.plan_done).forEach(function (d) {
+        var v = s.plan_done[d];
+        if (!isYMD(d) || !v || typeof v !== 'object') return;
+        var sk = {};
+        if (v.skipped && typeof v.skipped === 'object') Object.keys(v.skipped).forEach(function (k) { if (v.skipped[k]) sk[cleanTicker(k)] = true; });
+        planDone[d] = { fund: v.fund === true, back: v.back === true, skipped: sk };
+      });
     }
-    return { index_fund: fund, slice: slice, monthly_deposit: monthly, dismissed: dismissed };
+    return { index_fund: fund, slice: slice, monthly_deposit: monthly, dismissed: normDismissed(s.dismissed), plan_done: planDone };
   }
+  /* "Filed its Form 10 as Novus SpinCo 1, Inc." from an engine note (company is SEC's current name) */
+  /* the engine ends a note with it, followed only by the "Prices could not be read today" sentence when carried */
+  var FILED_RE = /\s*Filed its Form 10 as (.+?)\.(?=\s+Prices could not be read|\s*$)/;
+  function filedAs(note) { var m = FILED_RE.exec(String(note || '')); return m ? m[1].trim() : null; }
+  function withoutFiledAs(note) { return String(note || '').replace(FILED_RE, '').trim(); }
 
   /* events in processing order: same date -> deposits, then sells, then buys */
   var KIND_ORDER = { deposit: 0, sell: 1, buy: 2 };
@@ -702,20 +815,32 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     return ev;
   }
 
-  /* index pot: units of the index fund after each record date */
+  /* index pot: units of the index fund after each record date. Each record moves money at that day's
+     close; the real sale of the fund happens at another price, so selling all of it (the trim plan) can
+     leave a small negative balance: up to max(£25, 1% of the day's outflows) that is read as "sold it
+     all" (0 units), and only more than that is an overspend. */
   function indexPot(events, fund) {
     var units = 0, timeline = [], warnings = [], negative = false, missing = false;
-    events.forEach(function (e) {
-      var p = priceOn(fund, e.date);
-      if (!p) { missing = true; return; }
-      if (e.kind === 'buy') units -= e.amount / p; else units += e.amount / p;
-      if (units < -1e-9 && !negative) {
-        negative = true;
-        warnings.push({ date: e.date, text: 'Your records spend more than the account held on ' + fmtDate(e.date, { year: true }) + '. Check for a missing deposit or a mistyped amount.' });
-      } else if (units >= -1e-9) negative = false;
-      var last = timeline[timeline.length - 1];
-      if (last && last.date === e.date) last.v = units; else timeline.push({ date: e.date, v: units });
-    });
+    var i = 0;
+    while (i < events.length) {
+      var date = events[i].date, p = priceOn(fund, date), out = 0;
+      for (; i < events.length && events[i].date === date; i++) {
+        var e = events[i];
+        if (!p) { missing = true; continue; }
+        if (e.kind === 'buy') { units -= e.amount / p; out += e.amount; }
+        else { units += e.amount / p; if (e.amount < 0) out -= e.amount; }
+      }
+      if (!p) continue;
+      if (units < -1e-9) {
+        if (-units * p <= Math.max(POT_TOL_GBP, POT_TOL_SHARE * out)) units = 0;
+        else if (!negative) {
+          negative = true;
+          warnings.push({ date: date, code: 'overspend', text: 'Your records spend more than the account held on ' + fmtDate(date, { year: true }) + '. Check for a missing deposit or a mistyped amount.' });
+        }
+      }
+      if (units >= -1e-9) negative = false;
+      timeline.push({ date: date, v: units });
+    }
     return { units: units, timeline: timeline, warnings: warnings, missingPrice: missing };
   }
   function stepAt(timeline, date) {
@@ -744,34 +869,25 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     });
     return tl;
   }
-  function shareTimelines(events) {
-    var out = {};
-    events.forEach(function (e) {
-      if (e.kind === 'deposit') return;
-      var tl = out[e.ticker] || (out[e.ticker] = []);
-      var cur = tl.length ? tl[tl.length - 1].v : 0;
-      var v = cur + (e.kind === 'buy' ? e.shares : -e.shares);
-      if (Math.abs(v) < EPS) v = 0;
-      var last = tl[tl.length - 1];
-      if (last && last.date === e.date) last.v = v; else tl.push({ date: e.date, v: v });
-    });
-    return out;
-  }
   function spinValueGBP(shares, usd, gbpusd) {
     if (!(gbpusd > 0) || usd == null) return null;
     return shares * usd / gbpusd;
   }
 
   /* ---------------- positions ---------------- */
+  /* positions from the trade log. Within a day, sells go first while shares are held (a trim, then a new
+     buy), buys first from flat (a same-day round trip). A sell that leaves no more than 0.5% of the shares
+     held before it closes the position, as the engine does (DUST). timelines = shares held per ticker after
+     each trade date, for valuing the account on any day. */
   function positions(trades) {
     var byT = {};
     trades.forEach(function (t) { (byT[t.ticker] || (byT[t.ticker] = [])).push(t); });
-    var out = [], warnings = [];
+    var out = [], warnings = [], timelines = {};
     Object.keys(byT).sort().forEach(function (ticker) {
       var list = byT[ticker];
       var dates = [];
       list.forEach(function (t) { if (dates[dates.length - 1] !== t.date) dates.push(t.date); });
-      var net = 0, cur = null;
+      var net = 0, cur = null, tl = timelines[ticker] = [];
       dates.forEach(function (date) {
         var buys = list.filter(function (t) { return t.date === date && t.type === 'buy'; });
         var sells = list.filter(function (t) { return t.date === date && t.type === 'sell'; });
@@ -783,23 +899,29 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
             cur.buys.push(t); cur.cost += t.amount_gbp; cur.boughtShares += t.shares; net += t.shares;
           } else {
             if (!cur) { warnings.push({ date: t.date, text: 'Sale of ' + ticker + ' on ' + fmtDate(t.date, { year: true }) + ' has no matching buy in your records.' }); continue; }
+            var before = net, dust = Math.max(EPS, DUST * before);
             cur.sells.push(t); cur.proceeds += t.amount_gbp; cur.soldShares += t.shares; net -= t.shares;
+            if (net <= dust) {
+              if (net < -dust) warnings.push({ date: t.date, text: 'Your records sell more ' + ticker + ' shares than you bought (' + fmtDate(t.date, { year: true }) + ').' });
+              cur.closed = true; cur.closeDate = t.date; cur.shares = 0; net = 0; cur = null;
+              continue;
+            }
           }
           cur.shares = net;
-          if (t.type === 'sell' && net <= EPS) {
-            if (net < -EPS) warnings.push({ date: t.date, text: 'Your records sell more ' + ticker + ' shares than you bought (' + fmtDate(t.date, { year: true }) + ').' });
-            cur.closed = true; cur.closeDate = t.date; cur.shares = 0; net = 0; cur = null;
-          }
         }
+        tl.push({ date: date, v: net });
       });
     });
-    return { list: out, warnings: warnings };
+    return { list: out, warnings: warnings, timelines: timelines };
   }
   function sellDateFor(days, buyDate, fallback) {
     var d = tradingDayAfter(days, buyDate, HOLD_DAYS);
     if (d) return { date: d, source: 'calendar' };
     if (isYMD(fallback)) return { date: fallback, source: 'pipeline' };
-    return { date: addDays(buyDate, 365), source: 'approx' };
+    /* no calendar yet: 252 NYSE days is about 365 calendar days; never a weekend */
+    var d = addDays(buyDate, 365);
+    while (isWeekend(d)) d = addDays(d, 1);
+    return { date: d, source: 'approx' };
   }
 
   /* ---------------- XIRR ---------------- */
@@ -860,18 +982,24 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   }
 
   /* ---------------- the whole picture ---------------- */
-  /* input: {today, nowMs, market:{status,pipeline,calendar}, prices:{ID:doc}, checks:{CIK:doc}, trades:[...], deposits:[...], settings:{} } */
+  function nRec(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+  /* input: {today (NY date), todayUK, nowMs, maxDate (last record date that counts; default the later of today
+     and todayUK), market:{status,pipeline,calendar}, prices:{ID:doc}, checks:{CIK:doc}, trades:[...], deposits:[...], settings:{} } */
   function computeAll(input) {
     input = input || {};
     var today = input.today;
+    var todayUK = input.todayUK || today;
+    var maxDate = input.maxDate || (todayUK && todayUK > today ? todayUK : today);
     var market = input.market || {};
     var st = normSettings(input.settings);
     var calDoc = market.calendar || null;
     var days = calDoc && Array.isArray(calDoc.days) ? calDoc.days.filter(isYMD).slice().sort() : [];
     var prices = {};
-    Object.keys(input.prices || {}).forEach(function (k) { var s = normSeries(input.prices[k]); if (s) prices[k] = s; });
-    var trades = cleanTrades(input.trades);
-    var deposits = cleanDeposits(input.deposits);
+    Object.keys(input.prices || {}).forEach(function (k) { var s = normSeries(input.prices[k]); if (s) prices[cleanTicker(k)] = s; });
+    var allTrades = cleanTrades(input.trades, maxDate);
+    var allDeposits = cleanDeposits(input.deposits, maxDate);
+    var trades = allTrades.filter(counted);
+    var deposits = allDeposits.filter(counted);
     var pipeline = (market.pipeline && Array.isArray(market.pipeline.items) ? market.pipeline.items : []).filter(function (it) { return it && typeof it === 'object'; });
     var checks = input.checks || {};
     var status = market.status || null;
@@ -880,43 +1008,69 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     var vuag = prices.VUAG || null, eqqq = prices.EQQQ || null, fx = prices.GBPUSD || null;
     var warnings = [];
 
-    var tradeDay = days.length ? (nextTradingDay(days, today, true) || today) : nextWeekday(today);
+    /* records the engine does not count (dated after today or before 2000, or trades in the index fund) */
+    var skipped = { future: 0, old: 0, reserved: 0 };
+    allTrades.concat(allDeposits).forEach(function (r) { if (r.skip) skipped[r.skip]++; });
+    if (skipped.future) warnings.push({ code: 'future', text: nRec(skipped.future, 'record is', 'records are') + ' dated after today, so ' + (skipped.future === 1 ? 'it isn’t' : 'they aren’t') + ' counted until that date. ' + (skipped.future === 1 ? 'It is' : 'They are') + ' marked in Records.' });
+    if (skipped.old) warnings.push({ code: 'old', text: nRec(skipped.old, 'record is', 'records are') + ' dated before 2000, so ' + (skipped.old === 1 ? 'it isn’t' : 'they aren’t') + ' counted. Check the year in Records.' });
+    if (skipped.reserved) warnings.push({ code: 'reserved', text: nRec(skipped.reserved, 'trade is', 'trades are') + ' in an index fund (VUAG or EQQQ) or GBPUSD, which aren’t counted: index fund trades don’t need logging. Delete ' + (skipped.reserved === 1 ? 'it' : 'them') + ' in Records.' });
+
+    /* ---- the next time the user can trade (the engine's action_day) ---- */
     function nextWeekday(d) { while (isWeekend(d)) d = addDays(d, 1); return d; }
+    var isTD = days.length ? isTradingDay(days, today) : !isWeekend(today);
+    var phase, tradeDay;
+    if (!isTD) {
+      phase = 'next';
+      tradeDay = (days.length && nextTradingDay(days, today, true)) || nextWeekday(today);
+    } else {
+      var bucket = input.nowMs != null && isFinite(input.nowMs) && todayNY(input.nowMs) === today ? nyBucket(input.nowMs) : 'pre';
+      if (bucket === 'post') { /* after the 16:00 close an order fills at the next open */
+        phase = 'next';
+        tradeDay = (days.length && nextTradingDay(days, today, false)) || nextWeekday(addDays(today, 1));
+      } else { phase = bucket; tradeDay = today; }
+    }
+
+    /* ---- a ledger: index pot, positions and values on any day, from deposits plus a list of trades ---- */
+    function ledger(trs) {
+      var events = buildEvents(deposits, trs);
+      var pot = indexPot(events, fund);
+      var pos = positions(trs);
+      var avgCost = {};
+      trs.forEach(function (t) {
+        if (t.type !== 'buy') return;
+        var a = avgCost[t.ticker] || (avgCost[t.ticker] = { gbp: 0, sh: 0 });
+        a.gbp += t.amount_gbp; a.sh += t.shares;
+      });
+      var noPrice = {};
+      function spinsOn(date) {
+        var rate = priceOn(fx, date);
+        var out = [];
+        Object.keys(pos.timelines).forEach(function (tk) {
+          var sh = stepAt(pos.timelines[tk], date);
+          if (!(sh > EPS)) return;
+          var usd = priceOn(prices[tk], date);
+          var v = spinValueGBP(sh, usd, rate);
+          var estimated = false;
+          if (v == null) { var a = avgCost[tk]; v = a && a.sh > 0 ? sh * a.gbp / a.sh : 0; estimated = true; noPrice[tk] = true; }
+          out.push({ ticker: tk, shares: sh, usd: usd, fx: rate, value: v, estimated: estimated });
+        });
+        return out;
+      }
+      function potOn(date) { var p = priceOn(fund, date); return p ? stepAt(pot.timeline, date) * p : 0; }
+      function accountOn(date) {
+        var s = spinsOn(date);
+        var pv = potOn(date);
+        return { total: pv + s.reduce(function (a, b) { return a + b.value; }, 0), pot: pv, spins: s };
+      }
+      return { events: events, pot: pot, pos: pos, avgCost: avgCost, noPrice: noPrice, accountOn: accountOn };
+    }
 
     /* ---- valuation ---- */
-    var events = buildEvents(deposits, trades);
-    var pot = indexPot(events, fund);
+    var Lg = ledger(trades);
+    var events = Lg.events, pot = Lg.pot;
     warnings = warnings.concat(pot.warnings);
-    if (events.length && !fund) warnings.push({ text: 'No ' + fundCode + ' prices yet, so your index fund can’t be valued. They arrive with the next daily check.' });
+    if (events.length && !fund) warnings.push({ code: 'nofund', text: 'No ' + fundCode + ' prices yet, so your index fund can’t be valued. They arrive with the next daily check.' });
     if (events.length && pot.missingPrice && fund) warnings.push({ text: 'Some records are older than the ' + fundCode + ' price history.' });
-    var sharesTL = shareTimelines(events);
-    var avgCost = {};
-    trades.forEach(function (t) {
-      if (t.type !== 'buy') return;
-      var a = avgCost[t.ticker] || (avgCost[t.ticker] = { gbp: 0, sh: 0 });
-      a.gbp += t.amount_gbp; a.sh += t.shares;
-    });
-    var noPrice = {};
-    function spinsOn(date) {
-      var rate = priceOn(fx, date);
-      var out = [];
-      Object.keys(sharesTL).forEach(function (tk) {
-        var sh = stepAt(sharesTL[tk], date);
-        if (!(sh > EPS)) return;
-        var usd = priceOn(prices[tk], date);
-        var v = spinValueGBP(sh, usd, rate);
-        var estimated = false;
-        if (v == null) { var a = avgCost[tk]; v = a && a.sh > 0 ? sh * a.gbp / a.sh : 0; estimated = true; noPrice[tk] = true; }
-        out.push({ ticker: tk, shares: sh, usd: usd, fx: rate, value: v, estimated: estimated });
-      });
-      return out;
-    }
-    function potOn(date) { var p = priceOn(fund, date); return p ? stepAt(pot.timeline, date) * p : 0; }
-    function accountOn(date) {
-      var s = spinsOn(date);
-      var pv = potOn(date);
-      return { total: pv + s.reduce(function (a, b) { return a + b.value; }, 0), pot: pv, spins: s };
-    }
 
     var firstDate = events.length ? events[0].date : null;
     var lastRecord = events.length ? events[events.length - 1].date : null;
@@ -925,7 +1079,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       asOf = lastDate(fund) || lastRecord;
       if (status && isYMD(status.last_market_day) && status.last_market_day > asOf) asOf = status.last_market_day;
       if (lastRecord > asOf) asOf = lastRecord;
-      if (today && asOf > today) asOf = today;
+      if (maxDate && asOf > maxDate) asOf = maxDate;
       if (asOf < firstDate) asOf = firstDate;
     }
 
@@ -938,15 +1092,15 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       var spTL = benchTimeline(deposits, vuag), nqTL = benchTimeline(deposits, eqqq), inTL = moneyInTimeline(deposits);
       series = { dates: sd, account: [], sp: [], nq: [], moneyIn: [] };
       sd.forEach(function (d) {
-        series.account.push(fund ? accountOn(d).total : null);
+        series.account.push(fund ? Lg.accountOn(d).total : null);
         series.sp.push(vuag ? stepAt(spTL, d) * priceOn(vuag, d) : null);
         series.nq.push(eqqq ? stepAt(nqTL, d) * priceOn(eqqq, d) : null);
         series.moneyIn.push(stepAt(inTL, d));
       });
     }
 
-    var nowAcc = asOf && fund ? accountOn(asOf) : { total: null, pot: null, spins: [] };
-    Object.keys(noPrice).forEach(function (tk) { warnings.push({ text: 'No price for ' + tk + ' yet, so it is valued at what you paid until the next daily check.' }); });
+    var nowAcc = asOf && fund ? Lg.accountOn(asOf) : { total: null, pot: null, spins: [] };
+    Object.keys(Lg.noPrice).forEach(function (tk) { warnings.push({ text: 'No price for ' + tk + ' yet, so it is valued at what you paid until the next daily check.' }); });
 
     /* ---- headline ---- */
     var head = null;
@@ -973,8 +1127,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     }
 
     /* ---- positions ---- */
-    var pos = positions(trades);
-    warnings = warnings.concat(pos.warnings);
+    warnings = warnings.concat(Lg.pos.warnings);
     var byTicker = {};
     pipeline.forEach(function (it) { if (it.ticker) { var t = cleanTicker(it.ticker); (byTicker[t] || (byTicker[t] = [])).push(it); } });
     function pipeFor(tk, onOrBefore) {
@@ -987,36 +1140,44 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       return best || list[0] || null;
     }
     var vuagNow = vuag ? priceOn(vuag, asOf || today) : null;
-    var open = [], closed = [];
-    pos.list.forEach(function (p) {
-      var item = pipeFor(p.ticker, p.openDate);
-      var company = item && item.company ? String(item.company) : '';
-      if (!p.closed) {
-        var held = nowAcc.spins.filter(function (s) { return s.ticker === p.ticker; })[0];
-        var value = held ? held.value : (avgCost[p.ticker] ? p.shares * avgCost[p.ticker].gbp / avgCost[p.ticker].sh : 0);
+    /* open positions of a ledger, valued with acc (the account on asOf) */
+    function openOf(lg, acc) {
+      var out = [];
+      lg.pos.list.forEach(function (p) {
+        if (p.closed) return;
+        var item = pipeFor(p.ticker, p.openDate);
+        var held = acc.spins.filter(function (s) { return s.ticker === p.ticker; })[0];
+        var ac = lg.avgCost[p.ticker];
+        var value = held ? held.value : (ac && ac.sh > 0 ? p.shares * ac.gbp / ac.sh : 0);
         var sell = sellDateFor(days, p.openDate, item && item.model_sell_date);
         var left = days.length && sell.source === 'calendar' ? tradingDaysBetween(days, today, sell.date) : approxTradingDays(today, sell.date);
         var elapsed = days.length ? tradingDaysBetween(days, p.openDate, sell.date < today ? sell.date : today) : approxTradingDays(p.openDate, today);
-        var lastUsd = prices[p.ticker] ? priceOn(prices[p.ticker], asOf || today) : null;
-        open.push({
-          ticker: p.ticker, company: company, item: item, openDate: p.openDate, shares: p.shares, cost: p.cost, proceeds: p.proceeds,
-          value: value, estimated: !held || held.estimated, lastUsd: lastUsd,
+        out.push({
+          ticker: p.ticker, company: item && item.company ? String(item.company) : '', item: item, openDate: p.openDate, shares: p.shares, cost: p.cost, proceeds: p.proceeds,
+          value: value, estimated: !held || held.estimated, lastUsd: prices[p.ticker] ? priceOn(prices[p.ticker], asOf || today) : null,
           ret: p.cost > 0 ? (value + p.proceeds - p.cost) / p.cost : null,
           spRet: vuag ? vuagNow / priceOn(vuag, p.openDate) - 1 : null,
           sellDate: sell.date, sellSource: sell.source, daysLeft: sell.date <= today ? 0 : left,
-          elapsed: elapsed, progress: Math.max(0, Math.min(1, elapsed / HOLD_DAYS)), due: sell.date <= today, overdue: sell.date < today,
+          elapsed: elapsed, progress: Math.max(0, Math.min(1, elapsed / HOLD_DAYS)),
+          /* due on the next day the user can trade, like the engine (act >= sell day) */
+          due: sell.date <= tradeDay, overdue: sell.date < tradeDay,
           buys: p.buys, sells: p.sells
         });
-      } else {
-        var ret = p.cost > 0 ? (p.proceeds - p.cost) / p.cost : null;
-        var spRet = vuag ? priceOn(vuag, p.closeDate) / priceOn(vuag, p.openDate) - 1 : null;
-        closed.push({
-          ticker: p.ticker, company: company, openDate: p.openDate, closeDate: p.closeDate, cost: p.cost, proceeds: p.proceeds,
-          ret: ret, spRet: spRet, excess: ret != null && spRet != null ? ret - spRet : null, daysHeld: daysBetween(p.openDate, p.closeDate)
-        });
-      }
+      });
+      out.sort(function (a, b) { return cmpStr(a.sellDate, b.sellDate) || cmpStr(a.ticker, b.ticker); });
+      return out;
+    }
+    var open = openOf(Lg, nowAcc), closed = [];
+    Lg.pos.list.forEach(function (p) {
+      if (!p.closed) return;
+      var item = pipeFor(p.ticker, p.openDate);
+      var ret = p.cost > 0 ? (p.proceeds - p.cost) / p.cost : null;
+      var spRet = vuag ? priceOn(vuag, p.closeDate) / priceOn(vuag, p.openDate) - 1 : null;
+      closed.push({
+        ticker: p.ticker, company: item && item.company ? String(item.company) : '', openDate: p.openDate, closeDate: p.closeDate, cost: p.cost, proceeds: p.proceeds,
+        ret: ret, spRet: spRet, excess: ret != null && spRet != null ? ret - spRet : null, daysHeld: daysBetween(p.openDate, p.closeDate)
+      });
     });
-    open.sort(function (a, b) { return cmpStr(a.sellDate, b.sellDate) || cmpStr(a.ticker, b.ticker); });
     closed.sort(function (a, b) { return cmpStr(b.closeDate, a.closeDate) || cmpStr(a.ticker, b.ticker); });
     var stats = null;
     if (closed.length) {
@@ -1026,37 +1187,61 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
         n: closed.length, wins: wins, winRate: wins / closed.length,
         avgRet: closed.reduce(function (s, c) { return s + c.ret; }, 0) / closed.length,
         avgExcess: withEx.length ? withEx.reduce(function (s, c) { return s + c.excess; }, 0) / withEx.length : null,
+        nExcess: withEx.length,
         beat: withEx.filter(function (c) { return c.excess > 0; }).length,
         totalGain: closed.reduce(function (s, c) { return s + c.proceeds - c.cost; }, 0)
       };
     }
 
+    /* ---- the day's plan is worked out from the records before the trading day (trades logged for the
+       day itself are progress, not a new starting point), so its amounts stay put while the user works
+       through it; index fund trades are never logged, so a fresh plan would ask for them again ---- */
+    var basisTrades = trades.filter(function (t) { return t.date < tradeDay; });
+    var dayTrades = trades.filter(function (t) { return t.date >= tradeDay; });
+    var Bg = dayTrades.length ? ledger(basisTrades) : Lg;
+    var bAcc = Bg === Lg ? nowAcc : (asOf && fund ? Bg.accountOn(asOf) : { total: null, pot: null, spins: [] });
+    var bOpen = Bg === Lg ? open : openOf(Bg, bAcc);
+
     /* ---- buy candidates and pipeline groups ---- */
-    var openByT = {};
-    open.forEach(function (p) { openByT[p.ticker] = p; });
-    function boughtSince(tk, firstTrade) {
-      if (openByT[tk]) return true;
-      return trades.some(function (t) { return t.type === 'buy' && t.ticker === tk && (!firstTrade || t.date >= firstTrade); });
+    function openMap(list) { var m = {}; list.forEach(function (p) { m[p.ticker] = p; }); return m; }
+    var openByT = openMap(open), bOpenByT = Bg === Lg ? openByT : openMap(bOpen);
+    function boughtIn(list, om, tk, firstTrade) {
+      if (om[tk]) return true;
+      return list.some(function (t) { return t.type === 'buy' && t.ticker === tk && (!firstTrade || t.date >= firstTrade); });
     }
     var groups = { open: [], coming: [], waiting: [], missed: [] };
-    var candidates = [];
+    var candidates = [], planCands = [];
+    /* buys in the day's plan that the user hid during the day: they stay in the plan's maths */
+    var skippedToday = (st.plan_done[tradeDay] && st.plan_done[tradeDay].skipped) || {};
     pipeline.forEach(function (raw) {
       var tk = raw.ticker ? cleanTicker(raw.ticker) : null;
       var chk = checks[String(raw.id)] || null;
       var genuine = chk ? chk.genuine : undefined;
-      var it = { raw: raw, id: String(raw.id || ''), ticker: tk, company: raw.company ? String(raw.company) : (tk || 'Unnamed company'), status: raw.status, check: chk };
-      if (tk && boughtSince(tk, raw.first_trade)) { it.mine = true; return; }
+      var it = { raw: raw, id: String(raw.id || ''), ticker: tk, company: raw.company ? String(raw.company) : (tk || 'Unnamed company'), status: raw.status, check: chk, filedAs: filedAs(raw.note) };
+      var mineNow = !!tk && boughtIn(trades, openByT, tk, raw.first_trade);
+      var mineBefore = Bg === Lg ? mineNow : !!tk && boughtIn(basisTrades, bOpenByT, tk, raw.first_trade);
+      if (mineBefore) { it.mine = true; return; }
       var dismissed = tk && st.dismissed[tk];
-      var inWindow = isYMD(raw.buy_date) && isYMD(raw.buy_window_end) && raw.buy_date <= today && today <= raw.buy_window_end;
+      /* in its window on the day the user can next trade: after the close on the last day it is over */
+      var inWindow = isYMD(raw.buy_date) && isYMD(raw.buy_window_end) && raw.buy_date <= today && today <= raw.buy_window_end && raw.buy_window_end >= tradeDay;
       var excl = null;
       if (genuine === false) excl = 'Not a genuine spin-off' + (chk && chk.note ? ': ' + chk.note : '');
       else if (dismissed) excl = 'You hid it: ' + dismissed;
-      if (tk && !excl && ((raw.status === 'BUY' && (inWindow || !isYMD(raw.buy_window_end))) || (raw.status === 'watch' && inWindow))) {
+      var buyable = tk && ((raw.status === 'BUY' && (inWindow || !isYMD(raw.buy_window_end))) || (raw.status === 'watch' && inWindow));
+      if (buyable) {
         it.pending = raw.status === 'watch';
+        /* the engine carried a BUY forward without today's prices: its $1 / $100K check has not run */
+        it.unchecked = raw.status === 'BUY' && raw.avg_dollar_volume == null;
+      }
+      if (buyable && dismissed && genuine !== false && skippedToday[tk]) { it.skippedToday = true; planCands.push(it); }
+      if (buyable && !excl) {
+        planCands.push(it);
+        if (mineNow) { it.mine = true; it.boughtToday = true; return; }
         candidates.push(it);
         groups.open.push(it);
         return;
       }
+      if (mineNow) { it.mine = true; return; }
       if (!excl && raw.status === 'watch' && isYMD(raw.buy_date) && raw.buy_date > today) { groups.coming.push(it); return; }
       if (!excl && raw.status === 'waiting') { groups.waiting.push(it); return; }
       if (raw.status === 'waiting' && excl) { it.reason = excl; groups.missed.push(it); return; }
@@ -1071,8 +1256,10 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       })[raw.status] || 'Not bought';
       groups.missed.push(it);
     });
+    function byWindow(a, b) { return cmpStr(a.raw.buy_window_end || '9999', b.raw.buy_window_end || '9999') || cmpStr(a.raw.buy_date || '', b.raw.buy_date || '') || cmpStr(a.ticker || '', b.ticker || ''); }
     function recentKey(it) { var r = it.raw; return r.buy_window_end || r.buy_date || r.first_trade || r.form10_date || ''; }
-    groups.open.sort(function (a, b) { return cmpStr(a.raw.buy_window_end || '', b.raw.buy_window_end || '') || cmpStr(a.ticker || '', b.ticker || ''); });
+    groups.open.sort(byWindow);
+    planCands.sort(byWindow);
     groups.coming.sort(function (a, b) { return cmpStr(a.raw.buy_date, b.raw.buy_date) || cmpStr(a.ticker || '', b.ticker || ''); });
     groups.waiting.sort(function (a, b) { return cmpStr(b.raw.form10_date || '', a.raw.form10_date || '') || cmpStr(a.company, b.company); });
     groups.missed.sort(function (a, b) { return cmpStr(recentKey(b), recentKey(a)) || cmpStr(a.company, b.company); });
@@ -1083,27 +1270,56 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     var spinValue = nowAcc.spins.reduce(function (a, b) { return a + b.value; }, 0);
     var spinShare = accountNow != null && accountNow > 0 ? Math.max(0, Math.min(1, spinValue / accountNow)) : null;
     var sliceAmount = accountNow != null && accountNow > 0 ? accountNow / st.slice : null;
-    var dueSet = {};
-    open.forEach(function (p) { if (p.due) dueSet[p.ticker] = true; });
+    /* the day's buys are sized from the account before the day's trades, so they stay the same all day */
+    var perBuy = bAcc.total != null && bAcc.total > 0 ? bAcc.total / st.slice : null;
     var plan = null;
-    if (candidates.length && sliceAmount != null) {
-      var holdings = open.map(function (p) { return { ticker: p.ticker, value: p.value, dueSell: !!dueSet[p.ticker] }; });
-      plan = fundingPlan(nowAcc.pot, holdings, sliceAmount * candidates.length, fundCode);
+    if (planCands.length && perBuy != null) {
+      var holdings = bOpen.map(function (p) { return { ticker: p.ticker, value: p.value, dueSell: p.due }; });
+      plan = fundingPlan(bAcc.pot, holdings, perBuy * planCands.length, fundCode);
     }
+    var dayBuys = {}, daySells = {};
+    dayTrades.forEach(function (t) { var m = t.type === 'buy' ? dayBuys : daySells; m[t.ticker] = (m[t.ticker] || 0) + t.amount_gbp; });
+    var fundStep = null;
+    if (plan) {
+      if (plan.mode === 'trim') { if (plan.fundSell > 0.5) fundStep = { kind: 'sellAll', amount: plan.fundSell }; }
+      else if (plan.fundSell > 0.005) fundStep = { kind: 'sell', amount: plan.fundSell };
+      else if (plan.fundBuy > 0.5) fundStep = { kind: 'buy', amount: plan.fundBuy };
+      if (fundStep) fundStep.done = !!(st.plan_done[tradeDay] && st.plan_done[tradeDay].fund);
+    }
+    var dayPlan = {
+      day: tradeDay, fund: fundCode, perBuy: perBuy, funding: plan, fundStep: fundStep,
+      sells: bOpen.filter(function (p) { return p.due; }).map(function (p) {
+        return { ticker: p.ticker, company: p.company, shares: p.shares, value: p.value, done: daySells.hasOwnProperty(p.ticker), got: daySells[p.ticker] || 0 };
+      }),
+      trims: plan && plan.mode === 'trim' ? plan.trims.map(function (t) {
+        return { ticker: t.ticker, amount: t.amount, done: daySells.hasOwnProperty(t.ticker), got: daySells[t.ticker] || 0 };
+      }) : [],
+      buys: planCands.map(function (it) {
+        return { ticker: it.ticker, company: it.company, amount: perBuy, done: dayBuys.hasOwnProperty(it.ticker), paid: dayBuys[it.ticker] || 0, unchecked: !!it.unchecked, pending: !!it.pending,
+          skipped: !!it.skippedToday && !dayBuys.hasOwnProperty(it.ticker), reason: it.skippedToday ? st.dismissed[it.ticker] : null };
+      })
+    };
+    /* money meant for buys skipped during the day goes back into the index fund (or less of it is sold) */
+    var skippedBuys = dayPlan.buys.filter(function (b) { return b.skipped; });
+    dayPlan.putBack = skippedBuys.length && perBuy != null ? { amount: perBuy * skippedBuys.length, tickers: skippedBuys.map(function (b) { return b.ticker; }), done: !!(st.plan_done[tradeDay] && st.plan_done[tradeDay].back) } : null;
+    dayPlan.show = dayPlan.buys.length > 0 && dayPlan.sells.length + dayPlan.buys.length > 1;
+    dayPlan.allDone = dayPlan.sells.concat(dayPlan.trims).every(function (x) { return x.done; }) && dayPlan.buys.every(function (x) { return x.done || x.skipped; }) &&
+      (!fundStep || fundStep.done) && (!dayPlan.putBack || dayPlan.putBack.done);
 
-    /* ---- today's actions ---- */
+    /* ---- the day's actions ---- */
     var openUK = isYMD(tradeDay) ? usOpenUK(tradeDay) : '14:30';
+    var closeUK = isYMD(tradeDay) ? usCloseUK(tradeDay) : '21:00';
     var actions = [];
     open.filter(function (p) { return p.due; }).forEach(function (p) {
-      actions.push({ kind: 'sell', ticker: p.ticker, company: p.company, position: p, sellDate: p.sellDate, overdue: p.overdue, shares: p.shares, tradeDay: tradeDay, openUK: openUK });
+      actions.push({ kind: 'sell', ticker: p.ticker, company: p.company, position: p, sellDate: p.sellDate, overdue: p.overdue, shares: p.shares, tradeDay: tradeDay, phase: phase, openUK: openUK, closeUK: closeUK });
     });
     candidates.forEach(function (it) {
-      var r = it.raw;
-      var day = tradeDay;
+      var r = it.raw, ps = prices[it.ticker];
       actions.push({
-        kind: 'buy', ticker: it.ticker, company: it.company, item: it, pending: !!it.pending, check: it.check,
-        amount: sliceAmount, plan: plan, count: candidates.length, buyDate: r.buy_date || null, windowEnd: r.buy_window_end || null,
-        lastDay: r.buy_window_end ? r.buy_window_end <= day : false, tradeDay: day, openUK: openUK
+        kind: 'buy', ticker: it.ticker, company: it.company, item: it, pending: !!it.pending, unchecked: !!it.unchecked, check: it.check, filedAs: it.filedAs,
+        amount: perBuy, plan: plan, count: planCands.length, buyDate: r.buy_date || null, windowEnd: r.buy_window_end || null,
+        lastClose: ps ? { usd: ps.close[ps.close.length - 1], date: lastDate(ps) } : (typeof r.last_close === 'number' ? { usd: r.last_close, date: null } : null),
+        lastDay: r.buy_window_end ? r.buy_window_end <= tradeDay : false, tradeDay: tradeDay, phase: phase, openUK: openUK, closeUK: closeUK
       });
     });
     actions.sort(function (a, b) {
@@ -1115,11 +1331,11 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     /* ---- coming up ---- */
     var coming = [];
     groups.coming.forEach(function (it) {
-      coming.push({ kind: 'buy', date: it.raw.buy_date, ticker: it.ticker, company: it.company, windowEnd: it.raw.buy_window_end || null,
+      coming.push({ kind: 'buy', date: it.raw.buy_date, ticker: it.ticker, company: it.company, windowEnd: it.raw.buy_window_end || null, approx: false,
         tradingDays: days.length ? tradingDaysBetween(days, today, it.raw.buy_date) : approxTradingDays(today, it.raw.buy_date) });
     });
     open.forEach(function (p) {
-      if (p.sellDate > today) coming.push({ kind: 'sell', date: p.sellDate, ticker: p.ticker, company: p.company, tradingDays: p.daysLeft });
+      if (!p.due) coming.push({ kind: 'sell', date: p.sellDate, ticker: p.ticker, company: p.company, tradingDays: p.daysLeft, approx: p.sellSource !== 'calendar' });
     });
     coming.sort(function (a, b) { return cmpStr(a.date, b.date) || (a.kind === b.kind ? 0 : a.kind === 'sell' ? -1 : 1) || cmpStr(a.ticker, b.ticker); });
 
@@ -1135,22 +1351,44 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       health.errors = Array.isArray(status.errors) ? status.errors.filter(function (e) { return typeof e === 'string' && e; }) : [];
       health.triggerId = typeof status.trigger_id === 'string' && status.trigger_id ? status.trigger_id : null;
       health.nextCheck = typeof status.next_check === 'string' ? status.next_check : '';
-      health.todayNY = status.today_ny || null;
+      health.nextCheckText = health.nextCheck ? nextCheckText(health.nextCheck, input.nowMs) : '';
+      health.todayNY = isYMD(status.today_ny) ? status.today_ny : null;
     }
 
+    /* ---- price dates: the newest real US close and index fund close (never a record date) ---- */
+    var usLast = health.lastMarketDay || null;
+    if (!usLast) Object.keys(prices).forEach(function (k) {
+      var s = prices[k];
+      if (RESERVED.hasOwnProperty(k) || s.kind === 'fx' || s.kind === 'index' || (s.currency && s.currency !== 'USD')) return;
+      var d = lastDate(s);
+      if (d && (!usLast || d > usLast)) usLast = d;
+    });
+    /* closes missing: the engine runs before the US open, so on its run day it should have every close up
+       to the trading day before; fewer means its price download failed (e.g. Yahoo down) */
+    var lag = 0;
+    if (usLast && days.length && health.hasData) {
+      var ref = health.todayNY || today, iRef = lowerBound(days, ref);
+      var prevTD = iRef > 0 ? days[iRef - 1] : null;
+      if (prevTD && usLast < prevTD) lag = tradingDaysBetween(days, usLast, prevTD);
+    }
+    var priceDates = { us: usLast, fund: lastDate(fund), fx: lastDate(fx), lag: lag };
+
     /* ---- deposit reminder ---- */
-    var thisMonth = today ? monthKey(input.todayUK || today) : null;
-    var depositThisMonth = deposits.some(function (d) { return d.amount_gbp > 0 && monthKey(d.date) === thisMonth; });
+    var thisMonth = today ? monthKey(todayUK) : null;
+    var monthDeposits = deposits.filter(function (d) { return d.amount_gbp > 0 && monthKey(d.date) === thisMonth; });
 
     return {
-      today: today, tradeDay: tradeDay, isTradingDay: days.length ? isTradingDay(days, today) : !isWeekend(today), openUK: openUK,
-      settings: st, fundCode: fundCode, asOf: asOf, series: series, head: head,
+      today: today, todayUK: todayUK, maxDate: maxDate, tradeDay: tradeDay, phase: phase,
+      isTradingDay: isTD, openUK: openUK, closeUK: closeUK,
+      settings: st, fundCode: fundCode, asOf: asOf, series: series, head: head, priceDates: priceDates,
       account: { value: accountNow, pot: nowAcc.pot, potUnits: pot.units, spins: nowAcc.spins, spinValue: spinValue, spinShare: spinShare },
       risk: riskLevel(st.slice),
-      open: open, closed: closed, stats: stats, sliceAmount: sliceAmount, plan: plan,
+      open: open, closed: closed, stats: stats, sliceAmount: sliceAmount, plan: plan, dayPlan: dayPlan,
       actions: actions, coming: coming, groups: groups, health: health, warnings: warnings,
       hasRecords: events.length > 0, hasDeposits: deposits.length > 0, deposits: deposits, trades: trades,
-      depositThisMonth: depositThisMonth, lastDeposit: deposits.length ? deposits[deposits.length - 1] : null
+      allDeposits: allDeposits, allTrades: allTrades, skipped: skipped,
+      depositThisMonth: monthDeposits.length > 0, depositThisMonthTotal: monthDeposits.reduce(function (s, d) { return s + d.amount_gbp; }, 0),
+      lastDeposit: deposits.length ? deposits[deposits.length - 1] : null
     };
   }
 
@@ -1179,10 +1417,12 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     if (v < 0) return MINUS + s;
     return (opt.sign !== false && v > 0 ? '+' : '') + s;
   }
-  function fmtPts(x) { /* difference of two returns, in percentage points */
+  /* difference of two returns, in percentage points: "+38.0" (the unit goes in the label), or with long
+     "+38.0 percentage points" */
+  function fmtPts(x, long) {
     if (x == null || !isFinite(x)) return '–';
     var v = x * 100; if (Math.abs(v) < 0.05) v = 0;
-    return (v < 0 ? MINUS : v > 0 ? '+' : '') + Math.abs(v).toFixed(1) + ' pts';
+    return (v < 0 ? MINUS : v > 0 ? '+' : '') + Math.abs(v).toFixed(1) + (long ? ' percentage points' : '');
   }
   function fmtShares(x) {
     if (x == null || !isFinite(x)) return '–';
@@ -1198,6 +1438,15 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     else s = a.toFixed(0);
     return (x < 0 ? MINUS : '') + '£' + s;
   }
+  /* value labels: always one decimal in thousands (£39.0k, £38.4k) so neighbouring labels line up */
+  function fmtCompact1(x) {
+    if (x == null || !isFinite(x)) return '–';
+    var a = Math.abs(x), s;
+    if (a >= 999950) s = (a / 1e6).toFixed(2) + 'm';
+    else if (a >= 1e3) s = (a / 1e3).toFixed(1) + 'k';
+    else s = a.toFixed(0);
+    return (x < 0 ? MINUS : '') + '£' + s;
+  }
   function parseAmount(s) {
     if (typeof s === 'number') return s;
     s = String(s == null ? '' : s).replace(/[£$,\s]/g, '').replace(/−/g, '-');
@@ -1206,32 +1455,42 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   }
 
   /* ---------------- input validation ---------------- */
+  function dateError(date, maxDate, what) {
+    if (isDateShape(date) && date < MIN_DATE) return 'Check the year: dates before 2000 aren’t allowed.';
+    if (!isYMD(date)) return 'Enter the ' + what + '.';
+    if (maxDate && date > maxDate) return 'The date can’t be in the future.';
+    return null;
+  }
+  /* pounds rounded to pennies; null unless at least £0.01 */
+  function pennies(x) { if (!(x > 0) || !isFinite(x)) return null; var r = Math.round(x * 100) / 100; return r >= 0.01 ? r : null; }
   function validateTrade(inp, maxDate) {
     var errors = {};
     var date = String(inp.date || '');
-    if (!isYMD(date)) errors.date = 'Enter the trade date.';
-    else if (maxDate && date > maxDate) errors.date = 'The date can’t be in the future.';
+    var de = dateError(date, maxDate, 'trade date');
+    if (de) errors.date = de;
     var type = inp.type === 'sell' ? 'sell' : inp.type === 'buy' ? 'buy' : null;
     if (!type) errors.type = 'Choose buy or sell.';
     var ticker = cleanTicker(inp.ticker);
     if (!ticker) errors.ticker = 'Enter the ticker, for example CLDR.';
-    else if (!TICKER_RE.test(ticker)) errors.ticker = 'Use letters, digits, dots and dashes only.';
+    else if (!TICKER_RE.test(ticker)) errors.ticker = 'Use letters, digits and dashes, for example BRK-B.';
+    else if (ticker === 'GBPUSD') errors.ticker = 'GBPUSD is the pound to dollar exchange rate, not a share.';
+    else if (isReserved(ticker)) errors.ticker = ticker + ' is an index fund. Index fund trades don’t need logging: put money you add under Add money.';
     var shares = parseAmount(inp.shares);
-    if (!(shares > 0)) errors.shares = 'Enter the number of shares (more than 0).';
-    var amt = parseAmount(inp.amount_gbp);
-    if (!(amt > 0)) errors.amount_gbp = 'Enter the amount in pounds (more than 0).';
+    if (!(shares > 0) || !isFinite(shares)) errors.shares = 'Enter the number of shares (more than 0).';
+    var amt = pennies(parseAmount(inp.amount_gbp));
+    if (amt == null) errors.amount_gbp = 'Enter the amount in pounds (at least £0.01).';
     var ok = !Object.keys(errors).length;
-    return { ok: ok, errors: errors, value: ok ? { date: date, type: type, ticker: ticker, shares: shares, amount_gbp: Math.round(amt * 100) / 100, note: String(inp.note || '').trim().slice(0, 200) } : null };
+    return { ok: ok, errors: errors, value: ok ? { date: date, type: type, ticker: ticker, shares: shares, amount_gbp: amt, note: String(inp.note || '').trim().slice(0, 200) } : null };
   }
   function validateDeposit(inp, maxDate) {
     var errors = {};
     var date = String(inp.date || '');
-    if (!isYMD(date)) errors.date = 'Enter the date.';
-    else if (maxDate && date > maxDate) errors.date = 'The date can’t be in the future.';
-    var amt = parseAmount(inp.amount);
-    if (!(amt > 0)) errors.amount = 'Enter an amount in pounds (more than 0).';
+    var de = dateError(date, maxDate, 'date');
+    if (de) errors.date = de;
+    var amt = pennies(parseAmount(inp.amount));
+    if (amt == null) errors.amount = 'Enter an amount in pounds (at least £0.01).';
     var ok = !Object.keys(errors).length;
-    var signed = ok ? Math.round(amt * 100) / 100 * (inp.kind === 'out' ? -1 : 1) : null;
+    var signed = ok ? amt * (inp.kind === 'out' ? -1 : 1) : null;
     return { ok: ok, errors: errors, value: ok ? { date: date, amount_gbp: signed, note: String(inp.note || '').trim().slice(0, 200) } : null };
   }
 
@@ -1249,11 +1508,12 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   }
 
   root.SpinLogic = {
-    HOLD_DAYS: HOLD_DAYS, DEFAULTS: DEFAULTS, FUNDS: FUNDS, TICKER_RE: TICKER_RE,
-    SLICE_MIN: SLICE_MIN, SLICE_MAX: SLICE_MAX, RISK_LEVELS: RISK_LEVELS, riskLevel: riskLevel, validSlice: validSlice,
+    HOLD_DAYS: HOLD_DAYS, DEFAULTS: DEFAULTS, FUNDS: FUNDS, TICKER_RE: TICKER_RE, DUST: DUST, MIN_DATE: MIN_DATE,
+    SLICE_MIN: SLICE_MIN, SLICE_MAX: SLICE_MAX, RISK_LEVELS: RISK_LEVELS, riskLevel: riskLevel, validSlice: validSlice, validStoredSlice: validStoredSlice,
     isYMD: isYMD, parseYMD: parseYMD, toYMD: toYMD, addDays: addDays, daysBetween: daysBetween, weekdayOf: weekdayOf, isWeekend: isWeekend,
     monthKey: monthKey, monthName: monthName, fmtDate: fmtDate, todayNY: todayNY, todayLondon: todayLondon, zonedToUtc: zonedToUtc,
-    usOpenUK: usOpenUK, fmtInstantUK: fmtInstantUK,
+    usOpenUK: usOpenUK, usCloseUK: usCloseUK, fmtInstantUK: fmtInstantUK, clockKey: clockKey, nextCheckText: nextCheckText,
+    isReserved: isReserved, normDismissed: normDismissed, filedAs: filedAs, withoutFiledAs: withoutFiledAs, fmtCompact1: fmtCompact1,
     isTradingDay: isTradingDay, nextTradingDay: nextTradingDay, tradingDayAfter: tradingDayAfter, tradingDaysBetween: tradingDaysBetween,
     normSeries: normSeries, priceOn: priceOn, cleanTrades: cleanTrades, cleanDeposits: cleanDeposits, normSettings: normSettings,
     buildEvents: buildEvents, indexPot: indexPot, stepAt: stepAt, benchTimeline: benchTimeline, spinValueGBP: spinValueGBP,
@@ -1279,7 +1539,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     data: { market: {}, prices: {}, checks: {}, trades: {}, deposits: {}, settings: {} },
     loaded: {}, subErr: {},
     tab: 'today', openKeys: {}, pendingDelete: null, showAll: {},
-    check: { state: 'idle', msg: '' }, D: null, dirty: true
+    check: { state: 'idle', msg: '' }, D: null, dirty: true, settingsShadow: null, showDepForm: false, clock: ''
   };
 
   /* ---------- tiny DOM helpers (all untrusted text goes through textContent) ---------- */
@@ -1387,15 +1647,23 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     var ref = S.db.collection(col).doc(id);
     return write(col + '/' + id, function () { return ref.delete(); }, what);
   }
-  function currentSettings() {
-    var raw = S.data.settings.main || {};
-    var n = L.normSettings(raw);
-    return { index_fund: n.index_fund, slice: n.slice, monthly_deposit: n.monthly_deposit, dismissed: Object.assign({}, n.dismissed) };
+  /* The body for settings/main: the stored document as it is (a field the user is not editing is never
+     rewritten, so an unusual stored slice survives a dismissal), with dismissed keys normalised. It is built
+     when the queued write runs, from the newest state: the last body this page wrote until a newer snapshot
+     arrives, so quick taps (skip A, skip B, skip C) build on each other instead of overwriting. */
+  function settingsBody() {
+    var sh = S.settingsShadow && Date.now() - S.settingsShadow.at < 15000 ? S.settingsShadow.body : null;
+    var raw = sh || S.data.settings.main;
+    var next = raw && typeof raw === 'object' ? JSON.parse(JSON.stringify(raw)) : {};
+    next.dismissed = L.normDismissed(next.dismissed);
+    return next;
   }
   function saveSettings(mut, what) {
-    var next = currentSettings();
-    mut(next);
-    return write('settings/main', function () { return S.db.collection('settings').doc('main').set(next); }, what || 'your settings');
+    return write('settings/main', function () {
+      var next = settingsBody();
+      mut(next);
+      return S.db.collection('settings').doc('main').set(next).then(function (r) { S.settingsShadow = { body: next, at: Date.now() }; return r; });
+    }, what || 'your settings');
   }
 
   /* ---------- tabs ---------- */
@@ -1439,11 +1707,12 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     if (!S.dirty && S.D) return S.D;
     var m = S.data.market || {};
     S.D = L.computeAll({
-      today: todayNY(), todayUK: todayUK(), nowMs: nowMs(),
+      today: todayNY(), todayUK: todayUK(), nowMs: nowMs(), maxDate: maxRecordDate(),
       market: { status: m.status, pipeline: m.pipeline, calendar: m.calendar },
       prices: S.data.prices, checks: S.data.checks, trades: docs('trades'), deposits: docs('deposits'), settings: S.data.settings.main
     });
     S.dirty = false;
+    S.clock = L.clockKey(nowMs());
     return S.D;
   }
   function allLoaded() { return COLLECTIONS.every(function (c) { return S.loaded[c] || S.subErr[c]; }); }
@@ -1509,6 +1778,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     var seen = {};
     D.warnings.forEach(function (w) {
       if (seen[w.text]) return; seen[w.text] = true;
+      if (w.code === 'nofund' && !D.health.hasData) return; /* the first-run banner on Today already says prices come with the first check */
       items.push(h('div', { class: 'banner banner--warn' }, icon('alert'), h('div', null, h('p', { text: w.text }))));
     });
     g.textContent = '';
@@ -1517,12 +1787,28 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     var badge = $('badgeToday');
     badge.hidden = !D.actions.length; badge.textContent = D.actions.length ? String(D.actions.length) : '';
     $('tab-today').setAttribute('aria-label', D.actions.length ? 'Today, ' + D.actions.length + ' to do' : 'Today');
-    var pricesTo = D.asOf || D.health.lastMarketDay;
-    $('mastMeta').textContent = pricesTo ? 'Prices to ' + L.fmtDate(pricesTo) + ' close' : 'Trading 212 Stocks & Shares ISA';
+    $('mastMeta').textContent = pricesLine(D);
     setFormsDisabled(!canWrite());
     var ro = $('recReadOnly');
     ro.textContent = '';
     if (!canWrite()) ro.appendChild(h('div', { class: 'banner banner--info' }, icon('info'), h('div', null, h('p', null, 'You can view these records but not change them.'))));
+  }
+
+  /* the masthead: only real price dates (never a record date) */
+  function pricesLine(D) {
+    var p = D.priceDates, us = p.us, fd = p.fund;
+    if (!us && !fd) return D.health.hasData ? 'No prices yet' : 'Trading 212 Stocks & Shares ISA · No prices yet';
+    if (us && fd && us !== fd) return 'US prices to ' + L.fmtDate(us) + ' close · ' + D.fundCode + ' to ' + L.fmtDate(fd);
+    if (us && !fd) return 'US prices to ' + L.fmtDate(us) + ' close';
+    if (!us) return D.fundCode + ' prices to ' + L.fmtDate(fd) + ' close';
+    return 'Prices to ' + L.fmtDate(us) + ' close';
+  }
+  /* "today", "tomorrow" or "Wed 21 Oct", from the UK date */
+  function dayWord(d) {
+    var t = todayUK();
+    if (d === t) return 'today';
+    if (d === L.addDays(t, 1)) return 'tomorrow (' + L.fmtDate(d) + ')';
+    return L.fmtDate(d);
   }
 
   /* ---------- TODAY ---------- */
@@ -1536,14 +1822,14 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
         h('p', { class: 'fg2' }, 'Log the money already in your account as your first deposit. Then the tracker can size each buy and compare you with the index funds.'),
         h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn btn--primary', onclick: function () { setTab('records'); setTimeout(function () { $('depAmount').focus(); }, 30); } }, 'Log my first deposit'))));
     }
-    if (needsPlanPanel(D)) acts.push(planPanel(D));
+    if (D.dayPlan.show) acts.push(planPanel(D));
     D.actions.forEach(function (a) { acts.push(a.kind === 'sell' ? sellCard(a, D) : buyCard(a, D)); });
-    if (!D.actions.length && D.hasDeposits) {
+    if (!D.actions.length && D.hasDeposits && !D.dayPlan.show) {
       var next = D.coming[0];
       acts.push(h('div', { class: 'panel nothing' },
         h('p', { class: 'nothing__h' }, 'Nothing to do today'),
-        next ? h('p', { class: 'fg2' }, 'Next: ', next.kind === 'buy' ? 'buy ' : 'sell ', tickEl(next.ticker), next.company ? ' (' + next.company + ')' : '', ' on ' + L.weekdayOf(next.date) + ' ' + L.fmtDate(next.date, { weekday: false, year: next.date.slice(0, 4) !== D.today.slice(0, 4) }) + '.',
-          next.kind === 'buy' && D.sliceAmount != null ? ' At today’s value that is about ' + money(D.sliceAmount, { dp: 0 }) + ' (1/' + D.settings.slice + ' of your account), if it passes the price and volume check.' : '')
+        next ? h('p', { class: 'fg2' }, 'Next: ', next.kind === 'buy' ? 'buy ' : 'sell ', tickEl(next.ticker), next.company ? ' (' + next.company + ')' : '', ' on ' + (next.approx ? 'about ' : '') + L.weekdayOf(next.date) + ' ' + L.fmtDate(next.date, { weekday: false, year: next.date.slice(0, 4) !== D.today.slice(0, 4) }) + '.',
+          next.kind === 'buy' && D.sliceAmount != null ? ' At the last close that is about ' + money(D.sliceAmount, { dp: 0 }) + ' (1/' + D.settings.slice + ' of your account), if it passes the price and volume check.' : '')
           : h('p', { class: 'fg2' }, D.health.hasData ? 'No buy or sell dates are coming up yet. The daily check will flag new spin-offs.' : 'Buy dates appear after the first daily check.')));
     }
     fill('todayActions', acts);
@@ -1552,7 +1838,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   }
 
   function renderStatus(D) {
-    var H = D.health, out = [];
+    var H = D.health, out = [], pd = D.priceDates;
     if (!H.hasData) {
       out.push(h('div', { class: 'banner banner--info' }, icon('clock'), h('div', null,
         h('p', null, h('b', null, 'The first daily check hasn’t run yet.')),
@@ -1561,7 +1847,11 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       if (H.stale) {
         out.push(h('div', { class: 'banner banner--warn', role: 'status' }, icon('alert'), h('div', null,
           h('p', null, h('b', null, 'Data is from ' + L.fmtDate(H.todayNY || L.todayNY(H.generatedAt), { year: true }) + '; the daily check may have stopped.')),
-          h('p', null, 'Treat buy and sell dates with care until it runs again.'))));
+          h('p', null, 'Treat buy and sell dates with care until it runs again.' + (pd.us ? ' Amounts use prices to the ' + L.fmtDate(pd.us) + ' close.' : '')))));
+      } else if (pd.lag > 0) {
+        out.push(h('div', { class: 'banner banner--warn', role: 'status' }, icon('alert'), h('div', null,
+          h('p', null, h('b', null, 'US prices are from the ' + L.fmtDate(pd.us) + ' close, ' + pd.lag + ' trading day' + (pd.lag === 1 ? '' : 's') + ' old.')),
+          h('p', null, 'Amounts are estimates until the daily check reads new prices.'))));
       }
       if (!H.scanOk || H.errors.length) {
         out.push(h('div', { class: 'banner banner--bad', role: 'alert' }, icon('alert'), h('div', null,
@@ -1573,7 +1863,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     if (H.hasData) {
       txt.appendChild(h('span', null, h('span', { class: 'dot' + (H.stale ? ' dot--warn' : (!H.scanOk ? ' dot--bad' : '')), 'aria-hidden': 'true' }),
         'Checked ' + (H.generatedAt ? L.fmtInstantUK(H.generatedAt) + ' UK' : 'recently')));
-      if (H.nextCheck) txt.appendChild(h('span', { class: 'muted' }, 'Next: ' + H.nextCheck));
+      if (H.nextCheckText) txt.appendChild(h('span', { class: 'fg2' }, H.nextCheckText));
     }
     var line = h('div', { class: 'statusline' }, txt, checkNow(H));
     out.push(line);
@@ -1610,31 +1900,38 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     });
   }
 
+  /* when the order goes in: "today, when …", "now: the US market is open until …", "tomorrow (Wed 21 Oct), when …" */
   function whenText(a) {
-    var day = a.tradeDay, todayD = todayNY();
-    if (day === todayD) return 'today, US market opens ' + a.openUK + ' UK time';
-    return L.weekdayOf(day) + ' ' + L.fmtDate(day, { weekday: false }) + ', market opens ' + a.openUK + ' UK time';
+    if (a.phase === 'open') return 'now: the US market is open until ' + a.closeUK + ' UK time';
+    return dayWord(a.tradeDay) + ', when the US market opens at ' + a.openUK + ' UK time';
+  }
+  function fillsText(a) {
+    if (a.phase === 'open') return 'The US market is open, so it fills straight away.';
+    if (a.tradeDay === todayUK()) return 'Before ' + a.openUK + ' UK time the order waits and fills when the US market opens.';
+    return 'The order waits and fills when the US market opens, ' + L.fmtDate(a.tradeDay) + ' at ' + a.openUK + ' UK time.';
   }
 
   function sellCard(a, D) {
     var p = a.position, fund = D.fundCode;
-    var chip = a.overdue ? h('span', { class: 'chip chip--late' }, icon('alert'), 'Sell · overdue') : h('span', { class: 'chip chip--sell' }, icon('down'), 'Sell');
-    var due = a.overdue ? 'Overdue since ' + L.fmtDate(a.sellDate) + '. Sell ' + whenText(a) : 'Sell ' + whenText(a);
-    var alsoBuying = D.actions.some(function (x) { return x.kind === 'buy'; });
+    var approx = p.sellSource !== 'calendar';
+    var chip = a.overdue && !approx ? h('span', { class: 'chip chip--late' }, icon('alert'), 'Sell · overdue') : h('span', { class: 'chip chip--sell' }, icon('down'), 'Sell');
+    var due = approx ? 'Due about ' + L.fmtDate(a.sellDate) + ' (an estimate until the daily check brings the trading calendar). Sell ' + whenText(a)
+      : a.overdue ? 'Overdue since ' + L.fmtDate(a.sellDate) + '. Sell ' + whenText(a) : 'Sell ' + whenText(a);
+    var alsoBuying = D.dayPlan.show;
     var steps = [
       'Open Trading 212 and switch to your Stocks & Shares ISA.',
       h('span', null, 'Search ', tickEl(a.ticker), ', open your holding and tap Sell.'),
-      'Choose Quantity and enter all ' + L.fmtShares(a.shares) + ' shares. Review and confirm. Before the US market opens, the order waits and fills at the open.',
-      alsoBuying ? 'Keep the cash for today’s buys (see today’s plan).' : h('span', null, 'Once it has filled, search ', tickEl(fund), ', tap Buy, choose Value and enter the pounds you received.'),
+      'Choose Quantity and enter all ' + L.fmtShares(a.shares) + ' shares. Review and confirm. ' + fillsText(a),
+      alsoBuying ? 'Keep the cash for today’s buys (see the plan).' : h('span', null, 'Once it has filled, search ', tickEl(fund), ', tap Buy, choose Value and enter the pounds you received.'),
       'Come back here and tap I sold it. Enter the pounds Trading 212 paid you.'
     ];
     return h('article', { class: 'panel action', 'aria-label': 'Sell ' + a.ticker },
       h('div', { class: 'action__head' }, chip, h('span', { class: 'action__when', text: due })),
       h('h3', { class: 'action__title' }, tickEl(a.ticker), a.company ? h('span', { class: 'co', text: a.company }) : null),
-      h('p', { class: 'action__lead' }, alsoBuying ? 'Sell all ' + L.fmtShares(a.shares) + ' shares. The money goes toward today’s buys.' : 'Sell all ' + L.fmtShares(a.shares) + ' shares, then put the money into ' + fund + '.'),
+      h('p', { class: 'action__lead' }, alsoBuying ? 'Sell all ' + L.fmtShares(a.shares) + ' shares. The money goes toward the buys in the plan.' : 'Sell all ' + L.fmtShares(a.shares) + ' shares, then put the money into ' + fund + '.'),
       h('dl', { class: 'facts' },
         fact('Bought', L.fmtDate(p.openDate, { year: true })),
-        fact('Worth now', money(p.value, { dp: 0 }) + (p.estimated ? ' (est.)' : '')),
+        fact('Worth at the last close', money(p.value, { dp: 0 }) + (p.estimated ? ' (est.)' : '')),
         fact('Return', h('span', { class: cls(p.ret) }, L.fmtPct(p.ret))),
         fact('S&P fund, same dates', L.fmtPct(p.spRet))),
       stepsBlock('sell-' + a.ticker, steps),
@@ -1650,48 +1947,80 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       h('ol', null, steps.map(function (s) { return h('li', null, s); })));
   }
 
-  function needsPlanPanel(D) {
-    var buys = D.actions.filter(function (x) { return x.kind === 'buy'; }).length;
-    return buys > 0 && D.actions.length > 1;
-  }
-  function listTickers(arr) {
-    var out = [];
-    arr.forEach(function (t, i) { if (i) out.push(i === arr.length - 1 ? ' and ' : ', '); out.push(tickEl(t)); });
-    return out;
-  }
-  function trimLine(plan) {
-    return h('span', null, 'Trim your other spin-offs in proportion to their value: ',
-      plan.trims.map(function (t, i) { return [i ? ', ' : '', 'sell ' + money(t.amount) + ' of ', tickEl(t.ticker)]; }), '.');
-  }
+  /* The day's plan. Its amounts come from the records before the trading day, so they don't move while the
+     user works through it; each line ticks off when its trade is logged. Index fund trades are never logged,
+     so the fund line has its own "I've done this" box, kept in settings/main plan_done[day]. */
   function planPanel(D) {
-    var plan = D.plan, fund = D.fundCode;
-    var sells = D.actions.filter(function (x) { return x.kind === 'sell'; });
-    var buys = D.actions.filter(function (x) { return x.kind === 'buy'; });
-    var steps = [];
-    sells.forEach(function (a) { steps.push(h('span', null, 'Sell all ' + L.fmtShares(a.shares) + ' ', tickEl(a.ticker), ' shares (about ' + money(a.position.value, { dp: 0 }) + ').')); });
-    var saleNames = sells.map(function (a) { return a.ticker; });
-    if (plan && plan.mode === 'fund') {
-      if (plan.fundSell > 0.005) steps.push(h('span', null, 'Sell ' + money(plan.fundSell) + ' of ', tickEl(fund), '.' + (plan.fromSales > 0 ? ' With the money from ' + saleNames.join(' and ') + ' that makes ' + money(plan.need) + '.' : '')));
-      else if (plan.fromSales > 0) steps.push('Keep the money from ' + saleNames.join(' and ') + ' for the buys. No need to sell ' + fund + '.');
-    } else if (plan) {
-      steps.push(h('span', null, 'Sell all your ', tickEl(fund), ' (about ' + money(plan.fundSell, { dp: 0 }) + ').'));
-      if (plan.trims.length) steps.push(trimLine(plan));
+    var P = D.dayPlan, f = P.funding, fund = D.fundCode;
+    var items = [];
+    function line(done, content, extra) {
+      return h('li', { class: 'pl' + (done ? ' pl--done' : '') },
+        h('span', { class: 'pl__mark', 'aria-hidden': 'true' }, done ? icon('check') : null),
+        h('div', { class: 'pl__body' }, h('div', null, content, done ? h('span', { class: 'tag pl__tag' }, 'Done') : null), extra || null));
     }
-    if (buys.length) {
-      var amt = buys[0].amount != null ? money(buys[0].amount) : '–';
-      steps.push(h('span', null, 'Buy ', listTickers(buys.map(function (b) { return b.ticker; })), (buys.length > 1 ? ' for ' + amt + ' each.' : ' for ' + amt + '.') + ' Each is 1/' + D.settings.slice + ' of your account.'));
+    function logged(txt) { return h('div', { class: 'pl__note' }, txt); }
+    var fs = P.fundStep;
+    var fundLine = function () {
+      var txt;
+      if (fs.kind === 'sell') txt = h('span', null, 'Sell ' + money(fs.amount) + ' of ', tickEl(fund), '.' + (f.fromSales > 0 ? ' With the money from ' + P.sells.map(function (s) { return s.ticker; }).join(' and ') + ' that makes ' + money(f.need) + '.' : ''));
+      else if (fs.kind === 'sellAll') txt = h('span', null, 'Sell all your ', tickEl(fund), ' (about ' + money(fs.amount, { dp: 0 }) + ').');
+      else txt = h('span', null, 'Put the ' + money(fs.amount) + ' left over into ', tickEl(fund), '.');
+      return line(fs.done, txt, planToggle(D, 'fund', fs.done, 'planFundDone'));
+    };
+    P.sells.forEach(function (s) {
+      items.push(line(s.done, h('span', null, 'Sell all ' + L.fmtShares(s.shares) + ' ', tickEl(s.ticker), ' shares (about ' + money(s.value, { dp: 0 }) + ').'), s.done ? logged('Logged: you got ' + money(s.got) + '.') : null));
+    });
+    if (fs && fs.kind !== 'buy') items.push(fundLine());
+    else if (f && f.mode === 'fund' && f.fromSales > 0 && !fs) items.push(h('li', { class: 'pl pl--info' }, h('span', { class: 'pl__mark', 'aria-hidden': 'true' }), h('div', { class: 'pl__body' }, 'Keep the money from ' + P.sells.map(function (s) { return s.ticker; }).join(' and ') + ' for the buys. No need to sell ' + fund + '.')));
+    P.trims.forEach(function (t) {
+      items.push(line(t.done, h('span', null, 'Trim ', tickEl(t.ticker), ': sell ' + money(t.amount) + ' of it.'), t.done ? logged('Logged: you got ' + money(t.got) + '.') : null));
+    });
+    P.buys.forEach(function (b) {
+      if (b.skipped) {
+        items.push(h('li', { class: 'pl pl--skip' }, h('span', { class: 'pl__mark', 'aria-hidden': 'true' }, '–'),
+          h('div', { class: 'pl__body' }, h('div', null, h('span', null, 'Buy ', tickEl(b.ticker), ' for ' + money(b.amount) + '.'), h('span', { class: 'tag pl__tag pl__tag--skip' }, 'Skipped')),
+            logged(b.reason === 'Skipped' ? 'You skipped it.' : 'You hid it' + (b.reason ? ' (' + (DISMISS_SAID[b.reason] || b.reason) + ')' : '') + '.'))));
+        return;
+      }
+      items.push(line(b.done, h('span', null, 'Buy ', tickEl(b.ticker), ' for ' + (b.amount != null ? money(b.amount) : '–') + '.' + (b.unchecked && !b.done ? ' Check its price first (see its card).' : '')), b.done ? logged('Logged: you paid ' + money(b.paid) + '.') : null));
+    });
+    if (fs && fs.kind === 'buy') items.push(fundLine());
+    if (P.putBack) {
+      var pb = P.putBack;
+      items.push(line(pb.done, h('span', null, 'Put the ' + money(pb.amount) + ' meant for ' + pb.tickers.join(' and ') + ' back into ', tickEl(fund), '.' +
+        (fs && fs.kind !== 'buy' && !fs.done ? ' Or sell that much less ' + fund + ' above.' : '')), planToggle(D, 'back', pb.done, 'planBackDone')));
     }
-    if (plan && plan.fundBuy > 0.5) steps.push(h('span', null, 'Put the ' + money(plan.fundBuy) + ' left over into ', tickEl(fund), '.'));
-    else if (!buys.length && sells.length) steps.push(h('span', null, 'Put the money into ', tickEl(fund), '.'));
-    steps.push('Log each trade here as you go, using the buttons below.');
-    var shortfall = plan && plan.shortfall > 0.5 ? h('p', { class: 'neg', style: 'margin:0' }, 'Your account can’t cover every buy in full: ' + money(plan.shortfall) + ' short. Buy what the cash covers.') : null;
+    var title = P.day === todayUK() ? 'Today’s plan' : 'Plan for ' + dayWord(P.day);
+    var foot = [];
+    if (f && f.shortfall > 0.5) foot.push(h('p', { class: 'neg', style: 'margin:0' }, 'Your account can’t cover every buy in full: ' + money(f.shortfall) + ' short. Buy what the cash covers.'));
+    foot.push(h('p', { class: 'small fg2', style: 'margin:0' }, P.allDone ? 'All done. Nothing else to do until the next dated action.' :
+      'Each buy is 1/' + D.settings.slice + ' of your account before today’s trades, so the amounts stay the same while you work through the list. Log each trade with the buttons below and it ticks off here.'));
     return h('section', { class: 'panel todayplan', 'aria-labelledby': 'planH' },
-      h('h3', { id: 'planH' }, 'Today’s plan'),
-      h('ol', null, steps.map(function (x) { return h('li', null, x); })), shortfall);
+      h('h3', { id: 'planH' }, title),
+      h('ul', { class: 'planlist' }, items), foot);
   }
-  function planBlock(plan, a, D) {
+  /* settings/main plan_done keeps only the plan's own day: { day: { fund, back, skipped: {TICKER: true} } } */
+  function planDay(s, day) {
+    var cur = s.plan_done && typeof s.plan_done === 'object' && s.plan_done[day] && typeof s.plan_done[day] === 'object' ? s.plan_done[day] : {};
+    s.plan_done = {}; s.plan_done[day] = Object.assign({}, cur);
+    return s.plan_done[day];
+  }
+  function planToggle(D, field, done, id) {
+    var box = h('input', { type: 'checkbox', id: id, checked: done, disabled: !canWrite(), onchange: function (e) {
+      var on = e.currentTarget.checked, day = D.dayPlan.day;
+      saveSettings(function (s) { planDay(s, day)[field] = on; }, 'that').catch(function () {});
+    } });
+    return h('label', { class: 'pl__toggle', for: id }, box, h('span', null, 'I’ve done this'));
+  }
+  /* un-hiding a ticker also takes it out of any plan's skipped list */
+  function unhide(s, t) {
+    delete s.dismissed[t];
+    if (s.plan_done && typeof s.plan_done === 'object') Object.keys(s.plan_done).forEach(function (d) { var v = s.plan_done[d]; if (v && v.skipped && typeof v.skipped === 'object') { v.skipped = Object.assign({}, v.skipped); delete v.skipped[t]; } });
+  }
+  function planBlock(a, D) {
+    var P = D.dayPlan, plan = P.funding;
     if (!plan) return h('div', { class: 'plan' }, h('p', { class: 'fg2', style: 'margin:0' }, 'The amount appears once your account can be valued.'));
-    if (needsPlanPanel(D)) return h('div', { class: 'plan' }, h('p', { style: 'margin:0' }, h('b', null, 'Pay for it: '), 'follow today’s plan above. Sell first, then buy.'));
+    if (P.show) return h('div', { class: 'plan' }, h('p', { style: 'margin:0' }, h('b', null, 'Pay for it: '), 'follow the plan above. Sell first, then buy.'));
     var fund = plan.fund, lines = [];
     if (plan.mode === 'fund') {
       lines.push(h('p', { style: 'margin:0' }, h('b', null, 'Pay for it: '), 'sell ' + money(plan.fundSell) + ' of ', tickEl(fund), ' first.'));
@@ -1714,9 +2043,16 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       return h('div', { class: 'checkrow checkrow--ok' }, icon('check'), h('div', null, h('b', null, 'Checked: '), checkSentence(chk) || 'a genuine spin-off.'));
     }
     if (chk && chk.genuine == null) {
-      return h('div', { class: 'checkrow checkrow--unk' }, icon('q'), h('div', null, h('b', null, 'Unclear: '), chk.note ? String(chk.note) : 'the Form 10 didn’t settle whether this is a true spin-off.'));
+      return h('div', { class: 'checkrow checkrow--unk' }, icon('q'), h('div', null, h('b', null, 'Unclear: '), (chk.note ? String(chk.note).trim().replace(/\.?$/, '.') : 'the Form 10 didn’t settle whether this is a true spin-off.') + ' The rules still buy it; skip it only if the Form 10 shows it isn’t a real spin-off.'));
     }
-    return h('div', { class: 'checkrow checkrow--unk' }, icon('q'), h('div', null, h('b', null, 'Not yet checked. '), 'The daily check reads the Form 10 to confirm it’s a real spin-off.'));
+    return h('div', { class: 'checkrow checkrow--unk' }, icon('q'), h('div', null, h('b', null, 'Not yet checked. '), 'The daily check reads the Form 10 to confirm it’s a real spin-off. The rules still buy it; skip it only if the Form 10 shows it isn’t a real spin-off.'));
+  }
+  function noDot(s) { return String(s || '').trim().replace(/\.+$/, ''); }
+  /* the $1 / $100K rule in words, with the last close we have */
+  function priceRule(a) {
+    var lc = a.lastClose;
+    var close = lc && lc.usd != null ? ' (' + L.fmtMoney(lc.usd, { sym: '$' }) + (lc.date ? ' on ' + L.fmtDate(lc.date) : '') + ')' : '';
+    return 'Buy only if ' + a.ticker + ' last closed at $1 or more' + close + ' and trades about $100,000 a day or more.';
   }
 
   function buyCard(a, D) {
@@ -1724,33 +2060,38 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     var chip = h('span', { class: 'chip chip--buy' }, icon('up'), 'Buy');
     var when = a.windowEnd ? (a.lastDay ? 'Last day to buy. ' : 'Window open until ' + L.fmtDate(a.windowEnd) + '. ') + 'Buy ' + whenText(a) : 'Buy ' + whenText(a);
     var amt = a.amount != null ? money(a.amount) : '–';
-    var plan = a.plan;
+    var plan = D.dayPlan.funding;
     var steps = ['Open Trading 212 and switch to your Stocks & Shares ISA.'];
-    if (needsPlanPanel(D)) steps.push('Do the selling steps in today’s plan first.');
+    if (D.dayPlan.show) steps.push('Do the selling steps in the plan first.');
     else if (plan && plan.mode === 'fund') steps.push(h('span', null, 'Search ', tickEl(fund), ', tap Sell, choose Value and enter ' + money(plan.fundSell) + '. Confirm.'));
     else if (plan) {
       steps.push(h('span', null, 'Search ', tickEl(fund), ', tap Sell and sell all of it.'));
       if (plan.trims.length) steps.push(h('span', null, 'For each spin-off, tap Sell, choose Value and enter: ', plan.trims.map(function (t, i) { return [i ? ', ' : '', tickEl(t.ticker), ' ' + money(t.amount)]; }), '.'));
     }
-    steps.push(h('span', null, 'Search ', tickEl(a.ticker), ' and check the name matches ' + a.company + '.'));
+    steps.push(h('span', null, 'Search ', tickEl(a.ticker), ' and check the name matches ' + noDot(a.company) + (a.filedAs ? ' (it filed its Form 10 as ' + noDot(a.filedAs) + ')' : '') + '.'));
     steps.push('Tap Buy, choose Value in GBP, and enter ' + amt + '. Trading 212 converts it to dollars and charges a 0.15% FX fee.');
-    steps.push('Review and confirm. Before ' + a.openUK + ' UK time the order waits and fills when the US market opens.');
+    steps.push('Review and confirm. ' + fillsText(a));
     steps.push('Come back here and tap I bought it. Enter the shares and the total from the order confirmation.');
+    var warn = null;
+    if (a.unchecked) warn = h('div', { class: 'callout callout--warn', role: 'note' }, icon('alert'), h('p', null, h('b', null, 'Check the price first. '), 'Today’s $1 / $100K check couldn’t run because its prices couldn’t be read. ' + priceRule(a)));
+    else if (a.pending) warn = h('div', { class: 'callout callout--info', role: 'note' }, icon('clock'), h('p', null, h('b', null, 'Price check pending. '), 'The $1 / $100K check for this buy day runs with the next daily check. ' + priceRule(a) + ' Or wait for the check if the window allows.'));
     return h('article', { class: 'panel action', 'aria-label': 'Buy ' + a.ticker },
       h('div', { class: 'action__head' }, chip,
-        a.pending ? h('span', { class: 'chip chip--info', title: 'The $1 / $100K check runs with the next price update' }, icon('clock'), 'Price check pending') : null,
+        a.unchecked ? h('span', { class: 'chip chip--late' }, icon('alert'), 'Check price first') : a.pending ? h('span', { class: 'chip chip--info' }, icon('clock'), 'Price check pending') : null,
         h('span', { class: 'action__when', text: when })),
       h('h3', { class: 'action__title' }, tickEl(a.ticker), h('span', { class: 'co', text: a.company }), r.exchange ? h('span', { class: 'tag', text: r.exchange }) : null),
+      a.filedAs ? h('p', { class: 'small fg2', style: 'margin:0', text: 'Filed its Form 10 as ' + noDot(a.filedAs) + '.' }) : null,
       h('div', { class: 'amount' }, h('span', { class: 'amount__v', text: amt }),
-        h('span', { class: 'amount__n', text: D.account.value != null ? '1/' + D.settings.slice + ' of your ' + money(D.account.value, { dp: 0 }) + ' account' : '' })),
+        h('span', { class: 'amount__n', text: D.dayPlan.perBuy != null ? '1/' + D.settings.slice + ' of your account before today’s trades' : '' })),
       checkRow(a.check),
       h('dl', { class: 'facts' },
         fact('First traded', r.first_trade ? L.fmtDate(r.first_trade, { year: true }) : '–'),
-        fact('Last close', r.last_close != null ? L.fmtMoney(+r.last_close, { sym: '$' }) : '–'),
-        fact('Avg daily trading', r.avg_dollar_volume != null ? '$' + L.fmtCompact(+r.avg_dollar_volume).replace('£', '') : '–'),
+        fact('Last close', a.lastClose ? L.fmtMoney(+a.lastClose.usd, { sym: '$' }) + (a.lastClose.date ? ' (' + L.fmtDate(a.lastClose.date, { weekday: false }) + ')' : '') : '–'),
+        fact('Avg daily trading', r.avg_dollar_volume != null ? '$' + L.fmtCompact(+r.avg_dollar_volume).replace('£', '') : 'Not checked yet'),
         secLink(r.form10_url, r.id) ? h('div', null, h('dt', { text: 'SEC filing' }), h('dd', null, secLink(r.form10_url, r.id))) : null),
-      planBlock(plan, a, D),
+      planBlock(a, D),
       stepsBlock('buy-' + a.ticker, steps),
+      warn,
       h('div', { class: 'btns' },
         h('button', { type: 'button', class: 'btn btn--primary', disabled: !canWrite(), onclick: function (e) {
           openTrade({ type: 'buy', ticker: a.ticker, amount: a.amount != null ? a.amount.toFixed(2) : '', hint: 'Planned amount ' + amt + '. Enter what Trading 212 actually took, including the FX fee, and the shares you got.' }, e.currentTarget);
@@ -1759,10 +2100,33 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
         h('button', { type: 'button', class: 'btn btn--quiet', disabled: !canWrite(), onclick: function () { dismiss(a.ticker, 'Skipped'); } }, 'Skip this one')));
   }
 
+  var DISMISS_SAID = { 'Not available on Trading 212': 'not on Trading 212', 'Skipped': 'skipped' };
   function dismiss(ticker, reason) {
-    saveSettings(function (s) { s.dismissed[ticker] = reason; }, 'that choice').then(function () {
-      toast(ticker + ' hidden (' + reason.toLowerCase() + ').', { undo: function () { saveSettings(function (s) { delete s.dismissed[ticker]; }, 'that choice').catch(function () {}); } });
+    var P = S.D && S.D.dayPlan;
+    var inPlan = P && P.buys.some(function (b) { return b.ticker === ticker && !b.done; });
+    saveSettings(function (s) {
+      s.dismissed[ticker] = reason;
+      /* a buy in the day's plan stays there as skipped, so the plan's other amounts don't move */
+      if (inPlan) { var pd = planDay(s, P.day); pd.skipped = Object.assign({}, pd.skipped); pd.skipped[ticker] = true; }
+    }, 'that choice').then(function () {
+      toast(ticker + ' hidden (' + (DISMISS_SAID[reason] || reason) + ').', { undo: function () { saveSettings(function (s) { unhide(s, ticker); }, 'that choice').catch(function () {}); } });
     }).catch(function () {});
+  }
+
+  /* "£3,380 behind the S&P 500 fund" / "£684 ahead of …" */
+  function vsLine(x, name, key) {
+    var mark = h('span', { class: 'keyline ' + key });
+    if (x == null || !isFinite(x)) return h('div', { class: 'v' }, h('span', { class: 'num' }, '–'), mark, 'No ' + name + ' prices yet');
+    var r = Math.round(x);
+    if (r === 0) return h('div', { class: 'v' }, h('span', { class: 'num' }, '£0'), mark, 'Level with the ' + name);
+    return h('div', { class: 'v' }, h('span', { class: 'num ' + cls(r) }, money(Math.abs(r), { dp: 0 })), mark, (r > 0 ? 'ahead of the ' : 'behind the ') + name);
+  }
+  /* which closes the account value uses */
+  function valuedAt(D) {
+    var p = D.priceDates, held = D.account.spins.length > 0;
+    if (!p.fund) return '';
+    if (held && p.us && p.us !== p.fund) return 'At the latest closes: US ' + L.fmtDate(p.us) + ', ' + D.fundCode + ' ' + L.fmtDate(p.fund) + '.';
+    return 'At the ' + L.fmtDate(held && p.us ? p.us : p.fund) + ' close.';
   }
 
   function renderSummary(D) {
@@ -1774,10 +2138,11 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     var y = hd.you;
     var nodes = [
       h('div', null, h('p', { class: 'hero', text: money(y.value, { dp: 0 }) }),
-        h('p', { class: 'hero-sub' }, h('span', { class: cls(y.gain) }, signed(y.gain) + ' (' + L.fmtPct(y.gainPct) + ')'), ' on ' + money(y.moneyIn, { dp: 0 }) + ' paid in')),
+        h('p', { class: 'hero-sub' }, h('span', { class: cls(y.gain) }, signed(y.gain) + ' (' + L.fmtPct(y.gainPct) + ')'), ' on ' + money(y.moneyIn, { dp: 0 }) + ' paid in'),
+        valuedAt(D) ? h('p', { class: 'hero-sub hero-date', text: valuedAt(D) }) : null),
       h('div', { class: 'vsrow' },
-        h('div', null, h('div', { class: 'k' }, h('span', { class: 'keyline k-sp' }), 'vs S&P 500 fund'), h('div', { class: 'v ' + cls(hd.vsSP), text: hd.vsSP == null ? '–' : signed(hd.vsSP) })),
-        h('div', null, h('div', { class: 'k' }, h('span', { class: 'keyline k-nq' }), 'vs Nasdaq-100 fund'), h('div', { class: 'v ' + cls(hd.vsNQ), text: hd.vsNQ == null ? '–' : signed(hd.vsNQ) })))
+        h('div', null, vsLine(hd.vsSP, 'S&P 500 fund', 'k-sp')),
+        h('div', null, vsLine(hd.vsNQ, 'Nasdaq-100 fund', 'k-nq')))
     ];
     var share = D.account.spinShare, risk = D.risk;
     var parts = [];
@@ -1802,10 +2167,10 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     var list = D.coming.slice(0, S.showAll.coming ? 50 : 6);
     var ul = h('ul', { class: 'rows' }, list.map(function (c) {
       return h('li', { class: 'cal' },
-        h('div', { class: 'cal__d' }, h('b', { text: L.weekdayOf(c.date).slice(0, 3) }), L.fmtDate(c.date, { weekday: false }) + (c.date.slice(0, 4) !== D.today.slice(0, 4) ? ' ’' + c.date.slice(2, 4) : '')),
+        h('div', { class: 'cal__d' }, h('b', { text: (c.approx ? '≈ ' : '') + L.weekdayOf(c.date).slice(0, 3) }), L.fmtDate(c.date, { weekday: false }) + (c.date.slice(0, 4) !== D.today.slice(0, 4) ? ' ’' + c.date.slice(2, 4) : '')),
         h('div', { class: 'cal__t' },
           h('div', null, h('span', { class: 'chip ' + (c.kind === 'buy' ? 'chip--buy' : 'chip--sell') }, c.kind === 'buy' ? 'Buy' : 'Sell'), ' ', tickEl(c.ticker), c.company ? ' ' + c.company : ''),
-          h('div', { class: 'cal__s', text: (c.tradingDays === 1 ? 'Next trading day' : 'In ' + c.tradingDays + ' trading days') + (c.kind === 'sell' ? ' · 12 months since you bought' : (c.windowEnd ? ' · window to ' + L.fmtDate(c.windowEnd) : '')) })));
+          h('div', { class: 'cal__s', text: (c.tradingDays === 1 ? 'Next trading day' : 'In ' + (c.approx ? 'about ' : '') + c.tradingDays + ' trading days') + (c.kind === 'sell' ? ' · 12 months since you bought' + (c.approx ? ' (date approx.)' : '') : (c.windowEnd ? ' · window to ' + L.fmtDate(c.windowEnd) : '')) })));
     }));
     var nodes = [ul];
     if (D.coming.length > 6) nodes.push(h('button', { type: 'button', class: 'linkbtn more-btn', onclick: function () { S.showAll.coming = !S.showAll.coming; renderComing(D); } }, S.showAll.coming ? 'Show fewer' : 'Show all ' + D.coming.length));
@@ -1815,11 +2180,11 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   /* ---------- PERFORMANCE ---------- */
   function renderPerformance(D) {
     var hd = D.head;
-    $('chartAsOf').textContent = D.asOf ? 'to ' + L.fmtDate(D.asOf, { year: true }) : '';
+    $('chartAsOf').textContent = D.asOf && D.series && D.series.account.some(function (v) { return v != null; }) ? 'to ' + L.fmtDate(D.asOf, { year: true }) : '';
     if (!hd || !hd.you) {
       fill('perfHead', h('p', { class: 'empty' }, D.hasRecords ? 'Returns appear after the next daily check brings in prices.' : 'Log your deposits to compare your account with the index funds.'));
     } else {
-      var cols = [['you', 'Your account', 'k-you'], ['sp', 'S&P 500 fund only', 'k-sp'], ['nq', 'Nasdaq-100 fund only', 'k-nq']];
+      var cols = [['you', 'You', 'k-you'], ['sp', 'S&P 500 fund', 'k-sp'], ['nq', 'Nasdaq-100 fund', 'k-nq']];
       var row = function (label, f) {
         return h('tr', null, h('th', { scope: 'row', text: label }), cols.map(function (c) { var o = hd[c[0]]; return h('td', { class: c[0] === 'you' ? 'you' : '' }, o ? f(o) : '–'); }));
       };
@@ -1850,9 +2215,10 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       stat('Sold', String(st.n)),
       stat('Made money', Math.round(st.winRate * 100) + '%', st.wins + ' of ' + st.n),
       stat('Average return', h('span', { class: cls(st.avgRet) }, L.fmtPct(st.avgRet))),
-      stat('Average vs S&P fund', h('span', { class: cls(st.avgExcess) }, L.fmtPts(st.avgExcess)), 'beat it ' + st.beat + ' of ' + st.n)));
+      stat('Average vs S&P fund', h('span', { class: cls(st.avgExcess) }, L.fmtPts(st.avgExcess)),
+        st.nExcess ? 'percentage points · beat it ' + st.beat + ' of ' + st.nExcess : 'needs S&P fund prices')));
     var t = h('table', { class: 'dtable' },
-      h('thead', null, h('tr', null, ['Spin-off', 'Bought', 'Sold', 'Days', 'Paid', 'Got back', 'Return', 'S&P fund', 'Difference'].map(function (x) { return h('th', { scope: 'col', text: x }); }))),
+      h('thead', null, h('tr', null, ['Spin-off', 'Bought', 'Sold', 'Days', 'Paid', 'Got back', 'Return', 'S&P fund', 'Difference (percentage points)'].map(function (x) { return h('th', { scope: 'col', text: x }); }))),
       h('tbody', null, D.closed.map(function (c) {
         return h('tr', null,
           h('td', { class: 'txt' }, tickEl(c.ticker), c.company ? h('span', { class: 'muted', text: ' ' + c.company }) : null),
@@ -1865,7 +2231,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       return h('li', { class: 'closed' },
         h('div', { class: 'closed__top' }, h('span', null, tickEl(c.ticker), c.company ? h('span', { class: 'fg2', text: ' ' + c.company }) : null), h('span', { class: 'closed__ret num ' + cls(c.ret), text: L.fmtPct(c.ret) })),
         h('div', { class: 'closed__sub', text: L.fmtDate(c.openDate, { weekday: false, year: true }) + ' to ' + L.fmtDate(c.closeDate, { weekday: false, year: true }) + ' · ' + c.daysHeld + ' days' }),
-        h('div', { class: 'closed__sub' }, 'Paid ' + money(c.cost) + ', got back ' + money(c.proceeds) + ' · S&P fund ' + L.fmtPct(c.spRet) + ' · ', h('span', { class: cls(c.excess), text: L.fmtPts(c.excess) })));
+        h('div', { class: 'closed__sub' }, 'Paid ' + money(c.cost) + ', got back ' + money(c.proceeds) + ' · S&P fund ' + L.fmtPct(c.spRet) + (c.excess != null ? ' · ' : ''), c.excess != null ? h('span', { class: cls(c.excess), text: L.fmtPts(c.excess, true) + ' against it' }) : null));
     }));
     fill('perfClosed', [list, h('div', { class: 'tablewrap only-wide' }, t)]);
   }
@@ -1878,7 +2244,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     for (var i = 0; i < s.dates.length; i++) { if (i === s.dates.length - 1 || L.monthKey(s.dates[i + 1]) !== L.monthKey(s.dates[i])) idx.push(i); }
     idx.reverse();
     var t = h('table', { class: 'dtable' },
-      h('thead', null, h('tr', null, ['Month end', 'Your account', 'S&P 500 fund only', 'Nasdaq-100 fund only', 'Money in'].map(function (x) { return h('th', { scope: 'col', text: x }); }))),
+      h('thead', null, h('tr', null, ['Month end', 'You', 'S&P 500 fund', 'Nasdaq-100 fund', 'Paid in'].map(function (x) { return h('th', { scope: 'col', text: x }); }))),
       h('tbody', null, idx.map(function (i) {
         return h('tr', null, h('td', { text: L.fmtDate(s.dates[i], { weekday: false, year: true }) }),
           h('td', { text: money(s.account[i], { dp: 0 }) }), h('td', { text: money(s.sp[i], { dp: 0 }) }), h('td', { text: money(s.nq[i], { dp: 0 }) }), h('td', { text: money(s.moneyIn[i], { dp: 0 }) }));
@@ -1903,22 +2269,26 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     if (!host || host.offsetParent === null) return;
     var s = D.series;
     host.textContent = '';
-    if (!s || s.dates.length < 2 || s.account.every(function (v) { return v == null; })) {
+    var noChart = !s || s.dates.length < 2 || s.account.every(function (v) { return v == null; });
+    $('chartLegend').hidden = noChart;
+    if (noChart) {
       host.appendChild(h('p', { class: 'empty' }, D.hasRecords ? 'The chart appears once there are at least two days of prices.' : 'The chart appears once you log a deposit.'));
       return;
     }
     var W = Math.max(280, Math.floor(host.clientWidth || 600));
+    /* phone: no end labels; a readout strip above the plot shows the values (latest, or the touched day) */
     var narrow = W < 560;
-    var H = narrow ? 250 : 320;
-    var M = { t: 12, r: narrow ? 98 : 132, b: 26, l: 46 };
+    var H = narrow ? 240 : 320;
+    var M = { t: 12, r: narrow ? 14 : 166, b: 26, l: 46 };
     var pw = W - M.l - M.r, ph = H - M.t - M.b;
     var T = s.dates.map(function (d) { return +L.parseYMD(d); });
     var t0 = T[0], t1 = T[T.length - 1];
+    /* one name per series everywhere: legend, readout, end labels, tables */
     var lines = [
-      { key: 'you', name: 'Your account', tip: 'You', short: 'You', vals: s.account },
-      { key: 'sp', name: 'S&P 500 fund only', tip: 'S&P 500 fund', short: 'S&P', vals: s.sp },
-      { key: 'nq', name: 'Nasdaq-100 fund only', tip: 'Nasdaq-100', short: 'Nasdaq', vals: s.nq },
-      { key: 'in', name: 'Money in', tip: 'Money in', short: 'Paid in', vals: s.moneyIn, step: true }
+      { key: 'you', name: 'You', vals: s.account },
+      { key: 'sp', name: 'S&P 500 fund', vals: s.sp },
+      { key: 'nq', name: 'Nasdaq-100 fund', vals: s.nq },
+      { key: 'in', name: 'Paid in', vals: s.moneyIn, step: true }
     ].filter(function (l) { return l.vals.some(function (v) { return v != null; }); });
     var max = 0;
     lines.forEach(function (l) { l.vals.forEach(function (v) { if (v != null && v > max) max = v; }); });
@@ -1971,9 +2341,11 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       });
       svg.appendChild(sv('path', { class: 'ln ln-' + k, d: dd }));
     });
-    /* end markers + direct labels with leader lines when they collide */
+    /* end markers + direct labels with leader lines when they collide (wide only) */
     var n = T.length - 1, ex = x(T[n]);
     var labs = lines.map(function (l) { var v = l.vals[n]; return v == null ? null : { l: l, v: v, y0: y(v), y: y(v) }; }).filter(Boolean);
+    if (narrow) labs.forEach(function (q) { svg.appendChild(sv('circle', { class: 'end-' + q.l.key + ' ring', cx: ex, cy: q.y0, r: q.l.key === 'in' ? 3 : 4 })); });
+    if (narrow) labs = [];
     labs.sort(function (a, b) { return a.y0 - b.y0; });
     var gap = 14;
     for (var i = 1; i < labs.length; i++) if (labs[i].y - labs[i - 1].y < gap) labs[i].y = labs[i - 1].y + gap;
@@ -1983,7 +2355,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       var lx = ex + 12;
       if (Math.abs(q.y - q.y0) > 2) svg.appendChild(sv('line', { class: 'leader', x1: ex + 5, y1: q.y0, x2: lx - 3, y2: q.y }));
       svg.appendChild(sv('circle', { class: 'end-' + q.l.key + ' ring', cx: ex, cy: q.y0, r: q.l.key === 'in' ? 3 : 4 }));
-      svg.appendChild(sv('text', { class: 'elab', x: lx, y: q.y + 3.5 }, sv('tspan', null, q.l.short + ' '), sv('tspan', { class: 'ev' }, L.fmtCompact(q.v))));
+      svg.appendChild(sv('text', { class: 'elab', x: lx, y: q.y + 3.5 }, sv('tspan', null, q.l.name + ' '), sv('tspan', { class: 'ev' }, L.fmtCompact1(q.v))));
     });
     /* hover layer */
     var xh = sv('line', { class: 'xh', x1: 0, x2: 0, y1: M.t, y2: M.t + ph, visibility: 'hidden' });
@@ -1991,21 +2363,29 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     var dots = lines.map(function (l) { var c = sv('circle', { class: 'end-' + l.key + ' ring', r: 4, visibility: 'hidden' }); svg.appendChild(c); return c; });
     var hit = sv('rect', { class: 'hit', x: M.l, y: M.t, width: pw, height: ph });
     svg.appendChild(hit);
+    var tip = h('div', { class: narrow ? 'tip tip--strip' : 'tip', hidden: !narrow, 'aria-hidden': 'true' });
+    if (narrow) host.appendChild(tip);
     host.appendChild(svg);
-    var tip = h('div', { class: 'tip', hidden: true });
-    host.appendChild(tip);
+    if (!narrow) host.appendChild(tip);
     chartState = { idx: null };
+    function readout(i) {
+      tip.textContent = '';
+      tip.appendChild(h('div', { class: 'tip__d', text: (narrow && chartState.idx == null ? 'Latest · ' : '') + L.fmtDate(s.dates[i], { year: true }) }));
+      var rows = h('div', { class: 'tip__rows' });
+      lines.forEach(function (l) {
+        rows.appendChild(h('div', { class: 'tip__r' }, h('span', { class: 'keyline k-' + l.key }), h('span', { class: 'n', text: l.name }), h('span', { class: 'v', text: money(l.vals[i], { dp: 0 }) })));
+      });
+      tip.appendChild(rows);
+    }
+    if (narrow) readout(n);
     function show(i) {
       i = Math.max(0, Math.min(n, i));
       chartState.idx = i;
       var px = x(T[i]);
       xh.setAttribute('x1', px); xh.setAttribute('x2', px); xh.setAttribute('visibility', 'visible');
       lines.forEach(function (l, k) { var v = l.vals[i]; if (v == null) { dots[k].setAttribute('visibility', 'hidden'); return; } dots[k].setAttribute('cx', px); dots[k].setAttribute('cy', y(v)); dots[k].setAttribute('visibility', 'visible'); });
-      tip.textContent = '';
-      tip.appendChild(h('div', { class: 'tip__d', text: L.fmtDate(s.dates[i], { year: true }) }));
-      lines.forEach(function (l) {
-        tip.appendChild(h('div', { class: 'tip__r' }, h('span', { class: 'keyline k-' + l.key }), h('span', { class: 'n', text: narrow ? l.tip : l.name }), h('span', { class: 'v', text: money(l.vals[i], { dp: 0 }) })));
-      });
+      readout(i);
+      if (narrow) return; /* the strip sits above the plot and never covers it */
       tip.hidden = false;
       var scale = host.clientWidth / W;
       var tw = tip.offsetWidth, left = px * scale + 12;
@@ -2013,7 +2393,10 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       if (left < 0) left = 0;
       tip.style.transform = 'translate(' + Math.round(left) + 'px,' + Math.round(M.t * scale) + 'px)';
     }
-    function hide() { xh.setAttribute('visibility', 'hidden'); dots.forEach(function (c) { c.setAttribute('visibility', 'hidden'); }); tip.hidden = true; chartState.idx = null; }
+    function hide() {
+      xh.setAttribute('visibility', 'hidden'); dots.forEach(function (c) { c.setAttribute('visibility', 'hidden'); }); chartState.idx = null;
+      if (narrow) readout(n); else tip.hidden = true;
+    }
     function idxAt(clientX) {
       var r = svg.getBoundingClientRect();
       var px = (clientX - r.left) * (W / r.width);
@@ -2054,13 +2437,14 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   }
   function posCard(p) {
     var due = p.due;
-    var left = due ? (p.overdue ? 'Overdue since ' + L.fmtDate(p.sellDate) : 'Sell today') : p.daysLeft + ' trading day' + (p.daysLeft === 1 ? '' : 's') + ' left';
+    var approx = p.sellSource !== 'calendar';
+    var left = due ? (p.overdue && !approx ? 'Overdue since ' + L.fmtDate(p.sellDate) : 'Sell ' + dayWord(S.D.tradeDay)) : (approx ? 'about ' : '') + p.daysLeft + ' trading day' + (p.daysLeft === 1 ? '' : 's') + ' left';
     return h('article', { class: 'panel pos-card' },
       h('div', { class: 'pos-card__h' },
         h('h3', { class: 'pos-card__t' }, tickEl(p.ticker), p.company ? h('span', { class: 'co', text: p.company }) : null),
         h('div', null, h('div', { class: 'pos-card__ret ' + cls(p.ret), text: L.fmtPct(p.ret) }), h('div', { class: 'small muted', style: 'text-align:right', text: 'S&P fund ' + L.fmtPct(p.spRet) }))),
       h('dl', { class: 'facts' },
-        fact('Worth now', money(p.value) + (p.estimated ? ' (est.)' : '')),
+        fact('Worth at the last close', money(p.value) + (p.estimated ? ' (est.)' : '')),
         fact('Paid', money(p.cost)),
         fact('Shares', L.fmtShares(p.shares)),
         p.proceeds > 0 ? fact('Trimmed for', money(p.proceeds)) : fact('Bought', L.fmtDate(p.openDate, { year: true }))),
@@ -2080,24 +2464,24 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   function pipeNote(it, key) {
     var r = it.raw, chk = it.check;
     if (key === 'coming' || key === 'waiting') return ''; /* the dates line already says it */
-    if (key === 'open') return humanDates(r.note);
+    if (key === 'open') return humanDates(L.withoutFiledAs(r.note)); /* the filed-as name has its own line */
     if (chk && chk.genuine === false) return ''; /* the check line explains it */
     if (it.reason && it.reason.indexOf('You hid') === 0) return it.reason + '.';
-    if (r.status === 'skip' || r.status === 'not_new') return humanDates(r.note) || it.reason;
+    if (r.status === 'skip' || r.status === 'not_new') return humanDates(L.withoutFiledAs(r.note)) || it.reason;
     if (r.status === 'done') return 'Its 12 months ended' + (r.model_sell_date ? ' on ' + L.fmtDate(r.model_sell_date, { weekday: false, year: true }) : '') + '.';
     if (r.buy_window_end) return 'Buy window closed ' + L.fmtDate(r.buy_window_end, { weekday: false, year: true }) + '. The rules never buy late, so leave it.';
-    return it.reason || humanDates(r.note);
+    return it.reason || humanDates(L.withoutFiledAs(r.note));
   }
   function pipeRow(it, key) {
     var r = it.raw, chk = it.check;
     var dates = [];
-    if (r.form10_date) dates.push('Form 10 ' + L.fmtDate(r.form10_date, { weekday: false, year: true }));
+    if (r.form10_date) dates.push('Form 10 filed ' + L.fmtDate(r.form10_date, { weekday: false, year: true }));
     if (r.first_trade) dates.push('First traded ' + L.fmtDate(r.first_trade, { weekday: false, year: true }));
     if (r.buy_date && key !== 'waiting') dates.push((key === 'coming' ? 'Buy ' + L.weekdayOf(r.buy_date).slice(0, 3) + ' ' : 'Buy day ') + L.fmtDate(r.buy_date, { weekday: false, year: key !== 'coming' }));
-    if (r.buy_window_end && (key === 'open' || key === 'coming')) dates.push('window to ' + L.fmtDate(r.buy_window_end, { weekday: false }));
-    if (r.model_sell_date && key === 'missed' && (r.status === 'HOLD' || r.status === 'SELL')) dates.push('Model sell ' + L.fmtDate(r.model_sell_date, { weekday: false, year: true }));
+    if (r.buy_window_end && (key === 'open' || key === 'coming')) dates.push('window to ' + L.fmtDate(r.buy_window_end));
+    if (r.model_sell_date && key === 'missed' && (r.status === 'HOLD' || r.status === 'SELL')) dates.push('Rules’ sell date ' + L.fmtDate(r.model_sell_date, { weekday: false, year: true }));
     var chip = null;
-    if (key === 'open') chip = it.pending ? h('span', { class: 'chip chip--info' }, 'Buy · price check pending') : h('span', { class: 'chip chip--buy' }, 'Buy now');
+    if (key === 'open') chip = it.unchecked ? h('span', { class: 'chip chip--late' }, 'Buy · check price first') : it.pending ? h('span', { class: 'chip chip--info' }, 'Buy · price check pending') : h('span', { class: 'chip chip--buy' }, 'Buy now');
     else if (key === 'missed') chip = h('span', { class: 'chip chip--plain', text: r.status === 'skip' ? 'Skipped' : r.status === 'not_new' ? 'Not new' : (chk && chk.genuine === false) ? 'Not genuine' : it.reason && it.reason.indexOf('You hid') === 0 ? 'Hidden' : 'Missed' });
     var checkTxt = null;
     if (chk) {
@@ -2109,6 +2493,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     return h('div', { class: 'pipe' },
       h('div', { class: 'pipe__top' }, it.ticker ? tickEl(it.ticker) : h('span', { class: 'tag', text: 'No ticker yet' }), h('span', { class: 'pipe__co', text: it.company }), r.exchange ? h('span', { class: 'tag', text: r.exchange }) : null, chip),
       dates.length ? h('div', { class: 'pipe__dates' }, dates.map(function (d) { return h('span', { text: d }); })) : null,
+      it.filedAs ? h('div', { class: 'pipe__note', text: 'Filed its Form 10 as ' + noDot(it.filedAs) + '.' }) : null,
       checkTxt ? h('div', { class: 'pipe__note', text: checkTxt }) : null,
       note ? h('div', { class: 'pipe__note', text: note }) : null,
       h('div', { class: 'pipe__links' }, secLink(r.form10_url, it.id)));
@@ -2118,6 +2503,15 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   function renderRecords(D) {
     var mAmt = D.settings.monthly_deposit;
     $('depQuick').textContent = 'Add this month’s ' + money(mAmt);
+    /* once this month's deposit is logged, a second tap would double it: say so instead, form on request */
+    var logged = D.depositThisMonth;
+    $('depQuickRow').hidden = logged;
+    $('depDoneRow').hidden = !logged;
+    if (logged) $('depDone').textContent = L.monthName(todayUK(), true) + '’s ' + money(D.depositThisMonthTotal) + ' is logged.';
+    $('depForm').hidden = logged && !S.showDepForm;
+    $('depAnother').setAttribute('aria-expanded', String(!$('depForm').hidden));
+    $('depAnother').hidden = !$('depForm').hidden;
+    $('depStartHint').hidden = D.hasDeposits || D.allDeposits.length > 0;
     var dd = $('depDate'), td = $('tradeDate');
     dd.max = maxRecordDate(); td.max = maxRecordDate();
     if (!dd.value) dd.value = todayUK();
@@ -2144,31 +2538,38 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     }
     return li;
   }
+  var SKIP_TAG = { future: 'Not counted: dated in the future', old: 'Not counted: dated before 2000', reserved: 'Not counted: index fund trade' };
+  function skipTag(r) { return r.skip ? h('span', { class: 'tag tag--warn', text: SKIP_TAG[r.skip] }) : null; }
+  function recDate(d) { return L.fmtDate(d, { weekday: false, year: true }) || d; }
+  /* records the engine ignores always show (first), so they can be fixed; then the newest counted ones */
+  function shownRecs(list, lim) { return list.filter(function (r) { return r.skip; }).concat(list.filter(function (r) { return !r.skip; }).slice(0, lim)); }
   function renderTradeList(D) {
-    var list = D.trades.slice().reverse();
+    var list = D.allTrades.slice().reverse();
     if (!list.length) { fill('recTrades', h('p', { class: 'empty' }, 'No trades yet. Tap Record a trade after you buy or sell a spin-off.')); return; }
     var lim = S.showAll.trades ? 1000 : 10;
-    var ul = h('ul', { class: 'rows' }, list.slice(0, lim).map(function (t) {
+    var ul = h('ul', { class: 'rows' }, shownRecs(list, lim).map(function (t) {
       return recRow('trades', t, [
-        h('span', { class: 'rec__date', text: L.fmtDate(t.date, { weekday: false, year: true }) }),
+        h('span', { class: 'rec__date', text: recDate(t.date) }),
         h('span', { class: 'chip ' + (t.type === 'buy' ? 'chip--buy' : 'chip--sell'), text: t.type === 'buy' ? 'Buy' : 'Sell' }),
         tickEl(t.ticker),
-        h('span', { class: 'num small fg2', text: L.fmtShares(t.shares) + ' sh' }),
+        h('span', { class: 'num small fg2', text: L.fmtShares(t.shares) + ' shares' }),
         h('span', { class: 'rec__amt', text: money(t.amount_gbp) }),
+        skipTag(t),
         t.note ? h('span', { class: 'rec__note', text: t.note }) : null
       ], 'trade');
     }));
     fill('recTrades', [ul, list.length > 10 ? h('button', { type: 'button', class: 'linkbtn more-btn', onclick: function () { S.showAll.trades = !S.showAll.trades; renderTradeList(S.D); } }, S.showAll.trades ? 'Show fewer' : 'Show all ' + list.length) : null]);
   }
   function renderDepositList(D) {
-    var list = D.deposits.slice().reverse();
+    var list = D.allDeposits.slice().reverse();
     if (!list.length) { fill('recDeposits', h('p', { class: 'empty' }, 'No deposits yet. Log the money already in your account as your first deposit.')); return; }
     var total = D.deposits.reduce(function (s, d) { return s + d.amount_gbp; }, 0);
     var lim = S.showAll.deposits ? 1000 : 10;
-    var ul = h('ul', { class: 'rows' }, list.slice(0, lim).map(function (d) {
+    var ul = h('ul', { class: 'rows' }, shownRecs(list, lim).map(function (d) {
       return recRow('deposits', d, [
-        h('span', { class: 'rec__date', text: L.fmtDate(d.date, { weekday: false, year: true }) }),
+        h('span', { class: 'rec__date', text: recDate(d.date) }),
         h('span', { class: 'rec__amt ' + (d.amount_gbp < 0 ? 'neg' : ''), text: d.amount_gbp < 0 ? money(d.amount_gbp) + ' out' : money(d.amount_gbp) }),
+        skipTag(d),
         d.note ? h('span', { class: 'rec__note', text: d.note }) : null
       ], d.amount_gbp < 0 ? 'withdrawal' : 'deposit');
     }));
@@ -2180,12 +2581,12 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     if (!keys.length) { fill('recDismissed', h('p', { class: 'empty small' }, 'None. Spin-offs you mark as not on Trading 212 or skip are listed here.')); return; }
     var ul = h('ul', { class: 'rows' }, keys.map(function (k) {
       return h('li', { class: 'rec' }, h('div', { class: 'rec__main' }, tickEl(k), h('span', { class: 'small fg2', text: dm[k] })),
-        h('button', { type: 'button', class: 'btn btn--quiet btn--small', disabled: !canWrite(), onclick: function () { saveSettings(function (s) { delete s.dismissed[k]; }, 'that change').then(function () { toast(k + ' is back in the list.'); }).catch(function () {}); } }, 'Show again'));
+        h('button', { type: 'button', class: 'btn btn--quiet btn--small', disabled: !canWrite(), onclick: function () { saveSettings(function (s) { unhide(s, k); }, 'that change').then(function () { toast(k + ' is back in the list.'); }).catch(function () {}); } }, 'Show again'));
     }));
     var clear;
     if (S.pendingDelete === 'dismissed/all') {
       clear = h('div', { class: 'rec__confirm' }, h('span', null, 'Show all ' + keys.length + ' again?'),
-        h('button', { type: 'button', class: 'btn btn--danger btn--small', onclick: function () { S.pendingDelete = null; saveSettings(function (s) { s.dismissed = {}; }, 'that change').then(function () { toast('Hidden list cleared.'); }).catch(function () {}); renderDismissed(S.D); } }, 'Clear list'),
+        h('button', { type: 'button', class: 'btn btn--danger btn--small', onclick: function () { S.pendingDelete = null; saveSettings(function (s) { Object.keys(s.dismissed).forEach(function (k) { unhide(s, k); }); }, 'that change').then(function () { toast('Hidden list cleared.'); }).catch(function () {}); renderDismissed(S.D); } }, 'Clear list'),
         h('button', { type: 'button', class: 'btn btn--small', onclick: function () { S.pendingDelete = null; renderDismissed(S.D); } }, 'Keep'));
     } else clear = h('button', { type: 'button', class: 'linkbtn more-btn', disabled: !canWrite(), onclick: function () { S.pendingDelete = 'dismissed/all'; renderDismissed(S.D); } }, 'Clear the hidden list');
     fill('recDismissed', [ul, clear]);
@@ -2203,6 +2604,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     $('setRiskCustom').checked = risk.key === 'custom';
     $('setSlice').value = String(st.slice);
     $('setSliceField').hidden = risk.key !== 'custom';
+    $('setSliceHint').textContent = risk.outside ? 'Whole number, 4 to 40. Your saved 1/' + st.slice + ' is outside that range; it stays as it is unless you change it.' : 'Whole number, 4 to 40';
     $('setMonthly').value = st.monthly_deposit.toFixed(2);
   }
   function chosenSlice() {
@@ -2233,6 +2635,7 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       }).catch(function () {}).then(function () { btn.disabled = !canWrite(); });
     });
     $('depQuick').addEventListener('click', quickDeposit);
+    $('depAnother').addEventListener('click', function () { S.showDepForm = true; if (S.D) renderRecords(S.D); setTimeout(function () { $('depAmount').focus(); }, 20); });
     /* trade sheet */
     $('recAddTrade').addEventListener('click', function (e) { openTrade({}, e.currentTarget); });
     $('tradeCancel').addEventListener('click', closeTrade);
@@ -2249,7 +2652,8 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       }
     });
     ['tradeTypeBuy', 'tradeTypeSell'].forEach(function (id) { $(id).addEventListener('change', tradeTypeLabels); });
-    $('tradeTicker').addEventListener('input', function (e) { var v = e.target.value, u = v.toUpperCase(); if (v !== u) { var p = e.target.selectionStart; e.target.value = u; try { e.target.setSelectionRange(p, p); } catch (x) {} } });
+    /* typed the engine's way as you go: upper case, class shares with a dash (brk.b -> BRK-B) */
+    $('tradeTicker').addEventListener('input', function (e) { var v = e.target.value, u = v.toUpperCase().replace(/\./g, '-'); if (v !== u) { var p = e.target.selectionStart; e.target.value = u; try { e.target.setSelectionRange(p, p); } catch (x) {} } });
     $('tradeForm').addEventListener('submit', function (e) {
       e.preventDefault();
       if (!canWrite()) return;
@@ -2261,7 +2665,8 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       if (v.type === 'sell') {
         var held = S.D ? S.D.open.filter(function (p) { return p.ticker === v.ticker; })[0] : null;
         if (!held) { fe.textContent = 'You have no open ' + v.ticker + ' position in your records. Log the buy first.'; fe.hidden = false; return; }
-        if (v.shares > held.shares + 1e-6) { fieldErr('tradeShares', 'You hold ' + L.fmtShares(held.shares) + ' shares of ' + v.ticker + '.'); $('tradeShares').focus(); return; }
+        /* a sell up to 0.5% above the logged shares closes the position (Trading 212 shows more decimals than were typed) */
+        if (v.shares > held.shares * (1 + L.DUST) + 1e-9) { fieldErr('tradeShares', 'You hold ' + L.fmtShares(held.shares) + ' shares of ' + v.ticker + '.'); $('tradeShares').focus(); return; }
       }
       var btn = $('tradeSubmit'); btn.disabled = true;
       addTrade(v).then(function (ref) {
@@ -2284,11 +2689,15 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
       if (!canWrite()) return;
       var slice = chosenSlice(), monthly = L.parseAmount($('setMonthly').value);
       var bad = false;
-      if (!L.validSlice(slice)) { fieldErr('setSlice', 'Use a whole number from ' + L.SLICE_MIN + ' to ' + L.SLICE_MAX + '.'); bad = true; } else fieldErr('setSlice', '');
-      if (!(monthly > 0)) { fieldErr('setMonthly', 'Enter an amount above £0.'); bad = true; } else fieldErr('setMonthly', '');
-      if (bad) { $(!L.validSlice(slice) ? 'setSlice' : 'setMonthly').focus(); return; }
+      /* the form offers 4 to 40; a value already stored outside that (the engine takes any whole number from 1) is kept */
+      var stored = S.D ? S.D.settings.slice : null;
+      var sliceOk = L.validSlice(slice) || (slice === stored && L.validStoredSlice(slice));
+      if (!sliceOk) { fieldErr('setSlice', 'Use a whole number from ' + L.SLICE_MIN + ' to ' + L.SLICE_MAX + '.'); bad = true; } else fieldErr('setSlice', '');
+      var monthlyP = Math.round(monthly * 100) / 100;
+      if (!(monthlyP >= 0.01)) { fieldErr('setMonthly', 'Enter an amount of at least £0.01.'); bad = true; } else fieldErr('setMonthly', '');
+      if (bad) { $(!sliceOk ? 'setSlice' : 'setMonthly').focus(); return; }
       var fund = $('setFundEQQQ').checked ? 'EQQQ' : 'VUAG';
-      saveSettings(function (s) { s.index_fund = fund; s.slice = slice; s.monthly_deposit = Math.round(monthly * 100) / 100; }).then(function () {
+      saveSettings(function (s) { s.index_fund = fund; s.slice = slice; s.monthly_deposit = monthlyP; }).then(function () {
         settingsDirty = false; $('setMsg').textContent = 'Saved'; toast('Settings saved.');
       }).catch(function () {});
     });
@@ -2363,6 +2772,8 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
             var m = {};
             snap.docs.forEach(function (d) { if (d.exists) m[d.id] = d.data(); });
             S.data[name] = m; S.loaded[name] = true; delete S.subErr[name];
+            /* the shadow (last body written) gives way once a snapshot shows that write */
+            if (name === 'settings' && S.settingsShadow && JSON.stringify(m.main) === JSON.stringify(S.settingsShadow.body)) S.settingsShadow = null;
             invalidate();
           }, function (err) {
             S.subErr[name] = (err && err.code) || 'error';
@@ -2379,7 +2790,8 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
   initForms();
   if (window.ResizeObserver) { var lastW = 0; new ResizeObserver(function (en) { var w = Math.round(en[0].contentRect.width); if (w !== lastW) { lastW = w; if (S.tab === 'performance') drawChartSoon(); } }).observe($('chart')); }
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { S.dirty = true; invalidate(); } });
-  setInterval(function () { var t = todayNY(); if (S.D && S.D.today !== t) { S.dirty = true; invalidate(); } }, 60000);
+  /* re-render when the day's actions can change: a new date, the US open, the US close */
+  setInterval(function () { if (S.D && L.clockKey(nowMs()) !== S.clock) { S.dirty = true; invalidate(); } }, 30000);
   renderAll();
   boot();
 })();

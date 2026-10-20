@@ -21,7 +21,7 @@ const { chromium } = require('playwright');
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const OUT = arg('--out', '/tmp/claude-0/-home-user/cfe4416a-1a27-57e3-996d-df500b1ef602/scratchpad/dash_shots');
 const MODE = arg('--mode', 'all');
-const REAL_DOCS = arg('--real-docs', '/tmp/claude-0/-home-user/cfe4416a-1a27-57e3-996d-df500b1ef602/scratchpad/trk_real_docs');
+const REAL_DOCS = arg('--real-docs', '/tmp/claude-0/-home-user/cfe4416a-1a27-57e3-996d-df500b1ef602/scratchpad/trk_real_docs2');
 mkdirSync(OUT, { recursive: true });
 
 const page = readFileSync(join(here, 'spinoff_tracker.html'), 'utf8');
@@ -102,10 +102,10 @@ function variant(name) {
 }
 
 // Real engine output as a fixture: {today, now_utc, collections}
-function realFixture({ records = false, yahooDown = false } = {}) {
+function realFixture({ records = false, yahooDown = false, now: nowAt = null, edit = null } = {}) {
   const collections = { market: {}, prices: {}, checks: {}, trades: {}, deposits: {}, settings: {} };
-  for (const col of readdirSync(REAL_DOCS)) {
-    collections[col] ||= {};
+  for (const col of ['market', 'prices', 'checks']) {
+    if (!existsSync(join(REAL_DOCS, col))) continue;
     for (const f of readdirSync(join(REAL_DOCS, col))) if (f.endsWith('.json')) collections[col][f.slice(0, -5)] = JSON.parse(readFileSync(join(REAL_DOCS, col, f), 'utf8'));
   }
   let now = '2026-10-20T17:30:00Z';
@@ -119,6 +119,8 @@ function realFixture({ records = false, yahooDown = false } = {}) {
     collections.market.calendar.last_actual = null;
     now = '2026-10-26T13:00:00Z';
   }
+  if (nowAt) now = nowAt;
+  if (edit) edit(collections);
   return { today: now.slice(0, 10), now_utc: now, collections };
 }
 
@@ -152,9 +154,23 @@ async function snapTabs(o, name, tabs = TABS) {
     const file = join(OUT, `${name}_${t}.png`);
     await o.pg.screenshot({ path: file, fullPage: true });
     shots.push(file);
+    if ((o.pg.viewportSize() || {}).width < 600) await touchAudit(o, t);
   }
 }
 function report(o) { o.errs.forEach((e) => problems.push(`${o.label}: console error: ${e}`)); }
+// every visible control on the phone layout must be at least 44px tall (the chart's own hit area aside)
+async function touchAudit(o, where) {
+  const small = await o.pg.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('button, a[href], summary, .seg label, label.radio, label.pl__toggle').forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height || el.closest('[hidden]') || getComputedStyle(el).visibility === 'hidden') return;
+      if (r.height < 43.5) out.push((el.id ? '#' + el.id : el.tagName.toLowerCase() + '.' + (el.className || '')) + ' "' + (el.textContent || '').trim().slice(0, 30) + '" ' + Math.round(r.width) + 'x' + Math.round(r.height));
+    });
+    return out;
+  });
+  small.forEach((x) => problems.push(`${o.label}/${where}: touch target under 44px: ${x}`));
+}
 
 const browser = await chromium.launch({ proxy: process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY, bypass: 'localhost,127.0.0.1' } : undefined, args: ['--ignore-certificate-errors'] });
 try {
@@ -185,6 +201,9 @@ try {
     if (!(calls.length === 1 && calls[0].tool === 'fire_trigger' && calls[0].input.trigger_id === 'trig_01FixtureDailyCheck' && calls[0].server === 'Claude Code Remote')) problems.push('Check now did not call fire_trigger correctly: ' + JSON.stringify(calls));
     const msg = await pg.textContent('.checknow__msg');
     if (!/Started a check; results in a few minutes/.test(msg || '')) problems.push('Check now message missing: ' + msg);
+    const planText = async () => ((await pg.textContent('.todayplan')) || '').replace(/\s+/g, ' ');
+    const money = (t) => (t.match(/£[\d,]+\.\d\d/g) || []);
+    const planBefore = await planText();
     // I bought it -> sheet prefilled; submit with shares
     await pg.locator('article[aria-label="Buy CLDR"] button', { hasText: 'I bought it' }).click();
     await pg.waitForTimeout(80);
@@ -209,20 +228,62 @@ try {
     if (!spre.sell || !(+spre.sh > 0) || spre.focus !== 'tradeAmount' || !/received/.test(spre.lbl)) problems.push('Sell sheet prefill wrong: ' + JSON.stringify(spre));
     await pg.keyboard.press('Escape');
     if (!(await pg.locator('#sheet').isHidden())) problems.push('Escape did not close the sheet');
-    // Not on Trading 212 -> settings.dismissed
-    await pg.locator('article[aria-label="Buy PCHS"] button', { hasText: 'Not on Trading 212' }).click();
-    await pg.waitForTimeout(120);
+    // now really log the NFIN sale; the plan must keep every amount and tick NFIN and CLDR off
+    await pg.locator('article[aria-label="Sell NFIN"] button', { hasText: 'I sold it' }).click();
+    await pg.waitForTimeout(80);
+    await pg.fill('#tradeAmount', '2316');
+    await pg.click('#tradeSubmit');
+    await pg.waitForTimeout(200);
+    const planAfter = await planText();
+    const lost = money(planBefore).filter((m) => !planAfter.includes(m));
+    if (!money(planBefore).length || lost.length) problems.push('plan amounts changed after logging trades (' + lost.join(', ') + '):\n    before ' + planBefore + '\n    after  ' + planAfter);
+    const doneN = await pg.locator('.todayplan .pl--done').count();
+    if (doneN !== 2) problems.push('plan should tick NFIN and CLDR (2 done), got ' + doneN + ': ' + planAfter);
+    if (!/Sell £[\d,]+\.\d\d of VUAG/.test(planAfter)) problems.push('plan lost the VUAG line after logging: ' + planAfter);
+    // the fund line has its own box, saved in settings.plan_done[today]
+    await pg.click('#planFundDone');
+    await pg.waitForTimeout(150);
+    let fw = (await pg.evaluate(() => window.__writes)).filter((x) => x[1] === 'settings').pop();
+    if (!fw || !fw[3].plan_done || !fw[3].plan_done['2026-10-20'] || fw[3].plan_done['2026-10-20'].fund !== true || fw[3].slice !== 8) problems.push('fund done toggle write wrong: ' + JSON.stringify(fw));
+    if ((await pg.locator('.todayplan .pl--done').count()) !== 3) problems.push('fund line not ticked after the toggle');
+    await pg.screenshot({ path: join(OUT, 'interact_plan_progress.png'), fullPage: false }); shots.push(join(OUT, 'interact_plan_progress.png'));
+    await pg.locator('.todayplan').screenshot({ path: join(OUT, 'interact_plan_panel.png') }); shots.push(join(OUT, 'interact_plan_panel.png'));
+    // ticker typed the engine's way
+    await pg.click('#tab-records'); await pg.click('#recAddTrade'); await pg.waitForTimeout(60);
+    await pg.locator('#tradeTicker').pressSequentially('brk.b');
+    const tv = await pg.inputValue('#tradeTicker');
+    if (tv !== 'BRK-B') problems.push('ticker input should become BRK-B, got ' + tv);
+    await pg.keyboard.press('Escape');
+    await pg.click('#tab-today');
+    // Not on Trading 212 and Skip on two cards in quick succession -> both kept in settings.dismissed
+    await Promise.all([
+      pg.locator('article[aria-label="Buy PCHS"] button', { hasText: 'Not on Trading 212' }).click(),
+      pg.locator('article[aria-label="Buy OSTW"] button', { hasText: 'Skip this one' }).click()
+    ]);
+    await pg.waitForTimeout(200);
     w = await pg.evaluate(() => window.__writes);
     const sw = w.filter((x) => x[1] === 'settings').pop();
-    if (!sw || sw[3].dismissed.PCHS !== 'Not available on Trading 212' || sw[3].dismissed.KRNX !== 'Not available on Trading 212' || sw[3].slice !== 8) problems.push('Dismiss write wrong: ' + JSON.stringify(sw));
+    if (!sw || sw[3].dismissed.PCHS !== 'Not available on Trading 212' || sw[3].dismissed.OSTW !== 'Skipped' || sw[3].dismissed.KRNX !== 'Not available on Trading 212' || sw[3].slice !== 8 || !sw[3].plan_done) problems.push('Dismiss writes wrong: ' + JSON.stringify(sw));
+    const sk = sw && sw[3].plan_done && sw[3].plan_done['2026-10-20'] && sw[3].plan_done['2026-10-20'].skipped;
+    if (!sk || !sk.PCHS || !sk.OSTW || sw[3].plan_done['2026-10-20'].fund !== true) problems.push('skipped planned buys not kept in plan_done: ' + JSON.stringify(sw && sw[3].plan_done));
+    const planSkip = await planText();
+    if ((planSkip.match(/Skipped/g) || []).length !== 2 || !/Put the £9,580\.9\d meant for OSTW and PCHS back into VUAG/.test(planSkip) || !planSkip.includes('£12,055.38')) problems.push('plan after skipping two buys wrong: ' + planSkip);
+    const toastTxt = await pg.textContent('#toasts');
+    if (/trading 212/.test(toastTxt || '')) problems.push('toast lowercases Trading 212: ' + toastTxt);
     await pg.screenshot({ path: join(OUT, 'interact_after_actions.png'), fullPage: true }); shots.push(join(OUT, 'interact_after_actions.png'));
-    // Records: quick deposit, delete with two-step confirm, CSV
+    // Records: October's deposit is already logged, so no quick-add button; another deposit via the form
     await pg.click('#tab-records');
-    await pg.click('#depQuick');
+    if (await pg.locator('#depQuick').isVisible()) problems.push('quick deposit offered although this month is logged');
+    const doneTxt = (await pg.textContent('#depDone')) || '';
+    if (!/October’s £1,666\.66 is logged/.test(doneTxt)) problems.push('deposit logged line wrong: ' + doneTxt);
+    if (await pg.locator('#depForm').isVisible()) problems.push('deposit form open although this month is logged');
+    await pg.click('#depAnother');
+    await pg.fill('#depAmount', '250');
+    await pg.click('#depSubmit');
     await pg.waitForTimeout(120);
     w = await pg.evaluate(() => window.__writes);
     const dw = w.filter((x) => x[1] === 'deposits').pop();
-    if (!dw || dw[3].amount_gbp !== 1666.66 || dw[3].date !== '2026-10-20') problems.push('Quick deposit write wrong: ' + JSON.stringify(dw));
+    if (!dw || dw[3].amount_gbp !== 250 || dw[3].date !== '2026-10-20') problems.push('Deposit write wrong: ' + JSON.stringify(dw));
     const firstDel = pg.locator('#recTrades .rec button', { hasText: 'Delete' }).first();
     await firstDel.click();
     await pg.waitForTimeout(60);
@@ -286,7 +347,43 @@ try {
   }
   {
     const o = await open(browser, { width: 390, scheme: 'light', fx: variant('firstrun'), label: 'firstrun' });
-    await snapTabs(o, 'firstrun_390_light', ['today', 'performance', 'spinoffs']);
+    await snapTabs(o, 'firstrun_390_light', ['today', 'performance', 'spinoffs', 'records']);
+    if (!/No prices yet/.test(await o.pg.textContent('#mastMeta'))) problems.push('firstrun: masthead should say No prices yet');
+    // no deposits: the quick add is the main button
+    await o.pg.click('#tab-records');
+    await o.pg.click('#depQuick');
+    await o.pg.waitForTimeout(120);
+    const dw = (await o.pg.evaluate(() => window.__writes)).filter((x) => x[1] === 'deposits').pop();
+    if (!dw || dw[3].amount_gbp !== 1666.66 || dw[3].date !== '2026-10-20') problems.push('Quick deposit write wrong: ' + JSON.stringify(dw));
+    report(o); await o.ctx.close();
+  }
+  {
+    // records the engine does not count: listed with a tag, not counted, one banner each
+    const fx = variant('normal');
+    Object.assign(fx.collections.deposits, { odd1: { date: '1999-12-31', amount_gbp: 5000, note: 'typo year', created_at: '2026-10-20T10:00:00Z' } });
+    Object.assign(fx.collections.trades, { odd2: { date: '2026-10-22', type: 'buy', ticker: 'MRDP', shares: 3, amount_gbp: 300, note: 'logged ahead', created_at: '2026-10-20T10:00:00Z' },
+      odd3: { date: '2026-10-01', type: 'buy', ticker: 'VUAG', shares: 15, amount_gbp: 1500, note: '', created_at: '2026-10-20T10:00:00Z' },
+      odd4: { date: '2026-10-19', type: 'buy', ticker: 'brk.b', shares: 2, amount_gbp: 600, note: '', created_at: '2026-10-20T10:00:00Z' } });
+    const o = await open(browser, { width: 390, scheme: 'light', fx, label: 'oddrecords' });
+    await snapTabs(o, 'oddrecords_390_light', ['today', 'records']);
+    const rec = (await o.pg.textContent('#recTrades')) + (await o.pg.textContent('#recDeposits'));
+    for (const t of ['Not counted: dated in the future', 'Not counted: index fund trade', 'Not counted: dated before 2000', 'BRK-B']) if (!rec.includes(t)) problems.push('oddrecords: Records should show ' + t);
+    const gn = await o.pg.textContent('#globalNotice');
+    for (const re of [/dated after today/, /dated before 2000/, /index fund \(VUAG or EQQQ\)/]) if (!re.test(gn)) problems.push('oddrecords: missing banner ' + re);
+    if (!/£33,666\.58/.test(rec)) problems.push('oddrecords: total paid in should leave out the 1999 deposit');
+    report(o); await o.ctx.close();
+  }
+  {
+    // records but no market data yet: estimated sell dates say so; one banner, not two
+    const fx = variant('normal');
+    fx.collections.market = {}; fx.collections.prices = {}; fx.collections.checks = {};
+    const o = await open(browser, { width: 390, scheme: 'light', fx, label: 'nomarket' });
+    await snapTabs(o, 'nomarket_390_light', ['today', 'performance', 'spinoffs']);
+    await o.pg.click('#tab-today');
+    const t = (await o.pg.textContent('#todayActions')) + (await o.pg.textContent('#todayComing'));
+    if (!/about|≈/.test(t)) problems.push('nomarket: estimated sell date not marked as approximate: ' + t.slice(0, 200));
+    if (/No VUAG prices yet/.test(await o.pg.textContent('#globalNotice'))) problems.push('nomarket: duplicate No VUAG prices banner next to the first-run banner');
+    if (/Prices to/.test(await o.pg.textContent('#mastMeta'))) problems.push('nomarket: masthead claims prices');
     report(o); await o.ctx.close();
   }
   } // fixture mode
@@ -319,6 +416,49 @@ try {
         const o = await open(browser, { width: 390, scheme: 'light', fx: realFixture({ records: true, yahooDown: true }), label: 'real_yahoodown' });
         await snapTabs(o, 'real_yahoodown_390_light', ['today']);
         await expectText(o, '#todayStatus', /didn’t finish[\s\S]*Yahoo returned 503/, 'scan_ok false banner');
+        await expectText(o, '#todayStatus', /US prices are from the Mon 19 Oct close, 4 trading days old/, 'old prices banner');
+        await expectText(o, '#todaySummary', /At the latest closes: US Mon 19 Oct, VUAG Tue 20 Oct/, 'hero must say which closes it uses');
+        report(o); await o.ctx.close();
+      }
+      // VYLR carried forward as BUY without today's price check (unchecked), light and dark
+      for (const scheme of ['light', 'dark']) {
+        const fx = realFixture({ records: true, edit: (c) => { const v = c.market.pipeline.items.find((i) => i.ticker === 'VYLR'); Object.assign(v, { status: 'BUY', buy_date: '2026-10-20', buy_window_end: '2026-10-26', avg_dollar_volume: null, price_before_buy: null, note: 'Buy window 2026-10-20 to 2026-10-26. Buy day reached, but its prices could not be read today, so the $1 / $100K check has not been run: check its last close and daily trading yourself before buying. Prices could not be read today: dates and status carried forward from yesterday.' }); } });
+        const o = await open(browser, { width: 390, scheme, fx, label: 'real_unchecked_' + scheme });
+        await snapTabs(o, 'real_unchecked_390_' + scheme, ['today']);
+        await expectText(o, 'article[aria-label="Buy VYLR"]', /Check price first[\s\S]*couldn’t run[\s\S]*\$72\.39 on Mon 19 Oct/, 'unchecked VYLR card must warn with the last close');
+        await o.pg.locator('article[aria-label="Buy VYLR"]').screenshot({ path: join(OUT, 'real_unchecked_card_' + scheme + '.png') }); shots.push(join(OUT, 'real_unchecked_card_' + scheme + '.png'));
+        report(o); await o.ctx.close();
+      }
+      // after the US close on the last window day: no buy card (an order would fill a day late)
+      {
+        const fx = realFixture({ records: true, now: '2026-10-20T21:30:00Z', edit: (c) => { const v = c.market.pipeline.items.find((i) => i.ticker === 'VYLR'); Object.assign(v, { status: 'BUY', buy_date: '2026-10-14', buy_window_end: '2026-10-20', avg_dollar_volume: 9e6, price_before_buy: 70 }); } });
+        const o = await open(browser, { width: 390, scheme: 'light', fx, label: 'real_afterclose' });
+        await snapTabs(o, 'real_afterclose_390_light', ['today']);
+        if (await o.pg.locator('article[aria-label="Buy VYLR"]').count()) problems.push('after close on the last window day the VYLR buy card is still shown');
+        await expectText(o, '#todayStatus', /Next check: Wed 21 Oct, 06:45 UK/, 'next check date');
+        report(o); await o.ctx.close();
+      }
+      {
+        const fx = realFixture({ records: true, now: '2026-10-20T19:00:00Z', edit: (c) => { const v = c.market.pipeline.items.find((i) => i.ticker === 'VYLR'); Object.assign(v, { status: 'BUY', buy_date: '2026-10-14', buy_window_end: '2026-10-20', avg_dollar_volume: 9e6, price_before_buy: 70 }); } });
+        const o = await open(browser, { width: 390, scheme: 'light', fx, label: 'real_open' });
+        await expectText(o, 'article[aria-label="Buy VYLR"]', /Last day to buy\. Buy now: the US market is open until 21:00 UK time/, 'market-open wording');
+        report(o); await o.ctx.close();
+      }
+      // a stored slice outside the form's 4..40 is shown and kept when the user hides a spin-off
+      {
+        const fx = realFixture({ records: true, edit: (c) => { c.settings.main.slice = 3; const v = c.market.pipeline.items.find((i) => i.ticker === 'VYLR'); Object.assign(v, { status: 'BUY', buy_date: '2026-10-20', buy_window_end: '2026-10-26', avg_dollar_volume: 9e6, price_before_buy: 70 }); } });
+        const o = await open(browser, { width: 390, scheme: 'light', fx, label: 'real_slice3' });
+        await expectText(o, '#todaySummary', /Risk level: Custom, outside the tested range \(1\/3 each\)/, 'slice 3 shown as custom outside the range');
+        await expectText(o, 'article[aria-label="Buy VYLR"] .amount__n', /1\/3 of your account/, 'slice 3 sizing');
+        await o.pg.locator('article[aria-label="Buy VYLR"] button', { hasText: 'Skip this one' }).click();
+        await o.pg.waitForTimeout(150);
+        const sw = (await o.pg.evaluate(() => window.__writes)).filter((x) => x[1] === 'settings').pop();
+        if (!sw || sw[3].slice !== 3 || sw[3].dismissed.VYLR !== 'Skipped') problems.push('slice 3 not kept on dismiss: ' + JSON.stringify(sw));
+        await o.pg.click('#tab-records');
+        await o.pg.click('#setSave');
+        await o.pg.waitForTimeout(150);
+        const sw2 = (await o.pg.evaluate(() => window.__writes)).filter((x) => x[1] === 'settings').pop();
+        if (!sw2 || sw2[3].slice !== 3) problems.push('saving other settings changed the stored slice 3: ' + JSON.stringify(sw2));
         report(o); await o.ctx.close();
       }
       // risk level control on real data
