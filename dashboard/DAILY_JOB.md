@@ -21,16 +21,18 @@ rm -rf /tmp/spin && mkdir -p /tmp/spin/db /tmp/spin/cur
 ## 2. Export the owner's records
 
 With the ArtifactData tool (`url` = the tracker page), run `list` with `query.limit` 1000 and
-`out_dir` `/tmp/spin/db` for each collection: `trades`, `deposits`, `settings`, `checks`.
-An empty collection is fine.
+`out_dir` `/tmp/spin/db` for each collection: `trades`, `deposits`, `settings`, `checks`, `market`.
+An empty collection is fine. (`market` lets the scan fall back to yesterday's spin-off list if the SEC
+site is down.)
 
 ## 3. Scan
 
 ```bash
-cd /home/user/openinsiderdata && SPIN_TRIGGER_ID="$SPIN_TRIGGER_ID" python3 spinoff_tracker.py scan --out /tmp/spin/out --db /tmp/spin/db
+cd /home/user/openinsiderdata && python3 spinoff_tracker.py scan --out /tmp/spin/out --db /tmp/spin/db \
+  --trigger-id "<TRIGGER_ID from the scheduled task's prompt>" --next-check "Weekdays 06:45 UK time"
 ```
 
-`SPIN_TRIGGER_ID` is given in the scheduled task's prompt. If the scan crashes, go to step 8.
+If the scan crashes, go to step 8.
 
 ## 4. Check new spin-offs (at most 5 a day)
 
@@ -72,7 +74,8 @@ Read `/tmp/spin/out/alerts.json`.
 
 - If `noteworthy` is true: call PushNotification with the `push` text, then finish with a short message:
   the `lines`, one per line, and the tracker link.
-- Otherwise finish with one line: "No trades today." plus anything from `lines` worth knowing.
+- Otherwise finish with one line: the `push` text (it can say the scan was incomplete), plus anything
+  from `lines` worth knowing.
 
 ## 8. If something failed
 
