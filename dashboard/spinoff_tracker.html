@@ -1593,6 +1593,13 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     return {
       start: axis[0], end: axis[n], dates: axis, model: out.model, sp: out.sp, nq: out.nq,
       now: { model: out.model[n], sp: out.sp[n], nq: out.nq[n] },
+      /* average yearly return, only once the model has run a full year (shorter periods give silly rates) */
+      perYear: (function () {
+        var yrs = daysBetween(axis[0], axis[n]) / 365.25;
+        if (yrs < 1) return null;
+        var py = function (r) { return r == null ? null : Math.pow(1 + r, 1 / yrs) - 1; };
+        return { model: py(out.model[n]), sp: py(out.sp[n]), nq: py(out.nq[n]), years: yrs };
+      })(),
       bought: trades.filter(function (x) { return x.cost > 0; }).length, held: held.length,
       trades: trades.filter(function (x) { return x.cost > 0; })
     };
@@ -2275,8 +2282,13 @@ a svg{width:12px;height:12px;vertical-align:-1px;margin-left:2px}
     return h('div', { class: 'stats stats--3' }, tile('Strategy', m.now.model, 'k-you'), tile('S&P 500 fund', m.now.sp, 'k-sp'), tile('Nasdaq-100 fund', m.now.nq, 'k-nq'));
   }
   function modelNote(m) {
+    if (m.perYear) {
+      var p = m.perYear;
+      return 'Per year: strategy ' + L.fmtPct(p.model) + ', S&P 500 fund ' + L.fmtPct(p.sp) + ', Nasdaq-100 fund ' + L.fmtPct(p.nq) + ' (over ' + p.years.toFixed(1) + ' years). '
+        + m.bought + ' spin-offs bought, ' + m.held + ' held now. Includes trading costs.';
+    }
     if (!m.bought) return 'No spin-off has reached its buy day yet, so the model is all in the S&P 500 fund for now.';
-    return m.bought + (m.bought === 1 ? ' spin-off bought' : ' spin-offs bought') + ', ' + m.held + ' held now. Includes trading costs.';
+    return m.bought + (m.bought === 1 ? ' spin-off bought' : ' spin-offs bought') + ', ' + m.held + ' held now. Includes trading costs. A per-year figure appears from ' + L.fmtDate(L.addDays(m.start, 366), { weekday: false, year: true }) + '.';
   }
   function renderModel(D) {
     var m = D.model;
