@@ -976,3 +976,16 @@ def test_live_spinoffs_run_uses_engine_rules(tmp_path, fakes, monkeypatch):
     assert (tmp_path / 'spinoffs.csv').exists()
     items = {it['ticker']: it for it in st.scan(tmp_path / 'scan', None, today=TODAY)['alerts']['items']}
     assert 'VYLR' not in items
+
+
+def test_fill_recent_closes_adds_late_lse_days_from_intraday():
+    import pandas as pd
+    from spinoff_tracker import fill_recent_closes
+    daily = pd.Series([111.7], index=pd.DatetimeIndex(['2026-10-20']))
+    idx = pd.DatetimeIndex(['2026-10-21 15:30', '2026-10-21 16:00', '2026-10-22 08:00', '2026-10-22 16:00'],
+                           tz='Europe/London')
+    intra = pd.Series([111.5, 111.94, 111.0, 110.96], index=idx)
+    out = fill_recent_closes(daily, intra, '2026-10-21')
+    assert list(out.index.strftime('%Y-%m-%d')) == ['2026-10-20', '2026-10-21']   # 22 Oct is not final yet
+    assert out.iloc[-1] == 111.94                                                 # last bar of the day
+    assert fill_recent_closes(daily, None, '2026-10-21') is daily

@@ -352,6 +352,12 @@ class Fetcher:
         return h, True
 
 
+def yf_intraday(symbol):
+    """The last five days of 30-minute bars (used only to fill a late daily close)."""
+    import yfinance as yf
+    return yf.Ticker(symbol).history(period='5d', interval='30m', auto_adjust=False)
+
+
 def final_bar_dates(today, now=None):
     """Last date whose daily bar is final, for (US stocks, LSE funds, FX). now=None: a run before the US open on
     `today` (data to the day before)."""
@@ -362,6 +368,20 @@ def final_bar_dates(today, now=None):
     us = ny.date() if ny.time() >= US_FINAL else ny.date() - timedelta(days=1)
     lse = lon.date() if lon.time() >= LSE_FINAL else lon.date() - timedelta(days=1)
     return us, lse, lon.date()
+
+
+def fill_recent_closes(daily, intraday, until):
+    """Yahoo often publishes an LSE fund's daily close a day late. Add the missing days after the last daily
+    close, up to `until`, from the day's last intraday price (Close of the last bar). Both are Series of prices;
+    `intraday` is indexed by tz-aware or naive timestamps. Returns the daily series, extended."""
+    if intraday is None or len(intraday) == 0:
+        return daily
+    last = daily.index.max() if len(daily) else None
+    idx = intraday.index.tz_convert(LONDON) if getattr(intraday.index, 'tz', None) is not None else intraday.index
+    per_day = intraday.dropna().groupby(pd.DatetimeIndex(idx).normalize().tz_localize(None)).last()
+    extra = per_day[(per_day.index > (last if last is not None else pd.Timestamp.min))
+                    & (per_day.index <= pd.Timestamp(until))]
+    return pd.concat([daily, extra]).sort_index() if len(extra) else daily
 
 
 def fix_pence_glitches(s):
@@ -893,7 +913,14 @@ def scan(out, db=None, years=2, today=None, trigger_id=None, next_check=NEXT_CHE
             errors.append(f'Yahoo Finance: no prices for {sym}' + (f' ({fetch.failed[sym]})' if sym in fetch.failed
                                                                     else ''))
             continue
-        fund_px[fid] = fix_pence_glitches(h[col].dropna()) * scale
+        daily = h[col].dropna()
+        if len(daily) and daily.index.max() < pd.Timestamp(lse_cut):
+            try:   # the daily close is late: take the day's last intraday price instead
+                ih = yf_intraday(sym)
+                daily = fill_recent_closes(daily, ih['Close'] if len(ih) else None, lse_cut)
+            except Exception as e:  # noqa: BLE001 - a fallback; the daily data still stands
+                errors.append(f'Yahoo Finance: intraday {sym} for the latest close failed ({e.__class__.__name__})')
+        fund_px[fid] = fix_pence_glitches(daily) * scale
         docs[fid] = price_doc(fid, sym, 'GBP', 'index', fund_px[fid])
     h, _ = fetch(FX_SYMBOL, start, fx_cut)
     fx_px = h['Close'] if len(h) else None
